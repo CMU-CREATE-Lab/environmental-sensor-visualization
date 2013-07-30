@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+   <title>Fake Speck Visualization</title>
+   <link href="css/main.css" rel="stylesheet">
+   <style type="text/css">
+      #mapArea {
+         border: 1px solid black;
+         height: 300px;
+         background-color: lightcyan;
+      }
+
+      #dateAxisContainer {
+         border-top-width: 0;
+      }
+
+      #grapher_area {
+         display: none;
+      }
+   </style>
+   <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+   <script src="js/handlebars.js"></script>
+   <script src="js/org/bodytrack/grapher/gwt/grapher2.nocache.js"></script>
+   <script src="js/org/bodytrack/datastore/ChannelDatasource.js"></script>
+   <script src="js/org/bodytrack/datastore/FakeDevicesAndChannels.js"></script>
+   <script src="js/org/bodytrack/datastore/FakeDatastore.js"></script>
+   <script src="js/org/bodytrack/grapher/Grapher.js"></script>
+   <script language="JavaScript" type="text/javascript">
+
+      var now = new Date();
+      var today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime() / 1000;
+      var tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0).getTime() / 1000;
+
+      var grapherTemplate = null;
+      var channelInfoTemplate = null;
+      var datastore;
+      var dateAxis;
+      var grapher;
+      var plotContainer;
+
+      var channels;
+
+      window.grapherLoad = function() {
+         // create the FakeDatastore and initialize it with the fake devices and channels
+         datastore = new org.bodytrack.datastore.FakeDatastore(FAKE_DEVICES_AND_CHANNELS);
+
+         // compile the templates for later use
+         grapherTemplate = Handlebars.compile($("#grapher_template").html());
+         channelInfoTemplate = Handlebars.compile($("#channel_info_template").html());
+
+         // render the devices and channels
+         var devicesTemplate = Handlebars.compile($("#devices_and_channels_template").html());
+         var devicesHtml = devicesTemplate({"devices" : FAKE_DEVICES_AND_CHANNELS});
+         $("#devices").html(devicesHtml);
+
+         // initialize the DateAxis
+         dateAxis = new DateAxis("dateAxis", "horizontal", {"min" : today, "max" : tomorrow});
+         dateAxis.setCursorPosition((dateAxis.getMax() + dateAxis.getMin()) / 2);   // set initial cursor to the middle
+         dateAxis.addAxisChangeListener(function(cursorChangeEvent) {
+            var time = cursorChangeEvent['cursorPosition'];
+
+            // iterate over the devices and channels and render their values at the selected time
+            for (var i = 0; i < FAKE_DEVICES_AND_CHANNELS.length; i++) {
+               var device = FAKE_DEVICES_AND_CHANNELS[i];
+               for (var j = 0; j < device['channels'].length; j++) {
+                  var channel = device['channels'][j];
+                  var value = datastore.getValueAtTime(device['name'], channel['name'], time);
+                  $("#value_for_" + device['name'] + "_" + channel['name']).text(value.toFixed(3));
+               }
+            }
+         });
+
+         // set initial sizes
+         setSizes();
+
+         // set up window resize handler
+         $(window).resize(setSizes);
+
+         // show the grapher area
+         $("#grapher_area").show();
+
+      };
+
+      function loadChannel(deviceName, channelName) {
+         // find the device and channel
+         var channel = findChannel(FAKE_DEVICES_AND_CHANNELS, deviceName, channelName);
+         if (channel != null) {
+
+            $("#grapherContainer").empty().html(grapherTemplate({"selectedDevice" : deviceName, "selectedChannel" : channelName })).show();
+            $("#channelInfo").empty().html(channelInfoTemplate({"channel" : channel, "deviceName" : deviceName})).show();
+
+            var channelDatasource = datastore.getDatasource(deviceName, channelName);
+            grapher = new org.bodytrack.grapher.Grapher(channel, channelDatasource, dateAxis, "yAxis1");
+            grapher.addDataPointListener(function(val, eventType) {
+               $("#valueLabel").html(val ? val['dateString'] + " " + val['valueString'] : "");
+            });
+            plotContainer = new PlotContainer("pc1", false, [grapher.getPlot()]);
+
+            // set initial sizes
+            setSizes();
+         }
+      }
+
+      // find the device and channel
+      function findChannel(devicesAndChannels, deviceName, channelName) {
+         if (devicesAndChannels != null) {
+            for (var i = 0; i < devicesAndChannels.length; i++) {
+               var device = devicesAndChannels[i];
+               if (device['name'] == deviceName) {
+                  // we found the device, so try to find the channel
+                  for (var j = 0; j < device['channels'].length; j++) {
+                     var channel = device['channels'][j];
+                     if (channel['name'] == channelName) {
+                        // found the channel, so return it
+                        return channel;
+                     }
+                  }
+               }
+            }
+         }
+
+         return null;
+      }
+
+      function setSizes() {
+         var plotContainerWidth = $(window).width() - 20 - $("#column2").width() - $("#column3").width() - 2;
+         var plotContainerHeight = $("#column1").height() - 2;
+
+         // resize date axis
+         dateAxis.setSize(plotContainerWidth, $("#dateAxis").height(), SequenceNumber.getNext());
+
+         if (plotContainer != null) {
+            plotContainer.setSize(plotContainerWidth, plotContainerHeight, SequenceNumber.getNext());
+         }
+
+         if (grapher != null) {
+            var yAxisElement = $("#yAxis1");
+            grapher.getYAxis().setSize(yAxisElement.width(), yAxisElement.height(), SequenceNumber.getNext())
+         }
+      }
+   </script>
+
+   <script id="devices_and_channels_template" type="text/x-handlebars-template">
+      Devices and Channels
+      <ul>
+         {{#each devices}}
+         <li>
+            {{ name }}
+            <ul>
+               {{#each this.channels}}
+               <li>
+                  <a href="#" onclick="loadChannel('{{ ../name }}','{{ name }}');return false;">{{ name }}</a>
+                  (<span id="value_for_{{ ../name }}_{{ name }}"></span>)
+               </li>
+               {{/each}}
+            </ul>
+         </li>
+         {{/each}}
+      </ul>
+   </script>
+
+   <script id="grapher_template" type="text/x-handlebars-template">
+      <td width="400" id="column1">
+         <div id="plotContainer1" class="plotContainer">
+            <div id="pc1" class="plot"></div>
+         </div>
+      </td>
+      <td id="column2" class="axisCell">
+         <div id="yAxisContainer1" class="yAxisContainer">
+            <div id="yAxis1" class="yAxis"></div>
+         </div>
+      </td>
+   </script>
+
+   <script id="channel_info_template" type="text/x-handlebars-template">
+      <h2>{{deviceName}}: {{channel.name}}</h2>
+      <!-- TODO: add other channel info here?  Maybe lat/long, owner, time range at this location, etc.? -->
+   </script>
+</head>
+<body>
+<h1>Fake Speck Visualization</h1>
+<div id="devices"></div>
+<div id="grapher_area" class="textSelectionDisabled">
+   <table id="grapher" border="0" cellpadding="0" cellspacing="0">
+      <tr>
+         <td width="400">
+            <div id="mapArea">Map goes here</div>
+         </td>
+         <td>&nbsp;</td>
+      </tr>
+      <tr>
+         <td width="400">
+            <div id="dateAxisContainer">
+               <div id="dateAxis"></div>
+               <div id="valueLabel"></div>
+            </div>
+         </td>
+         <td>&nbsp;</td>
+      </tr>
+      <tr id="grapherContainer">
+      </tr>
+   </table>
+</div>
+<div id="channelInfo"></div>
+</body>
+</html>

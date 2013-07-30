@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+   <title>Remote Datastore Grapher</title>
+   <link href="css/main.css" rel="stylesheet">
+   <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+   <script src="js/handlebars.js"></script>
+   <script src="js/org/bodytrack/grapher/gwt/grapher2.nocache.js"></script>
+   <script src="js/org/bodytrack/datastore/ChannelDatasource.js"></script>
+   <script src="js/org/bodytrack/datastore/Datastore.js"></script>
+   <script src="js/org/bodytrack/grapher/Grapher.js"></script>
+   <script language="JavaScript" type="text/javascript">
+      var devices = null;
+
+      var grapherTemplate = null;
+      var dateAxis;
+      var grapher;
+      var plotContainer;
+
+      window.grapherLoad = function() {
+         // load the devices and channels from the remote server
+         $.ajax(
+               {
+                  type : 'GET',
+                  dataType : 'jsonp',
+                  timeout : 3000,
+                  cache : false,
+                  global : false,
+                  url : 'http://localhost:3000/users/1/sources/list',
+                  success : function(theDevices) {
+                     // save the devices for later
+                     devices = theDevices;
+
+                     // compile the grapher template for later use
+                     grapherTemplate = Handlebars.compile($("#grapher_template").html());
+
+                     // render the devices and channels
+                     var devicesTemplate = Handlebars.compile($("#devices_and_channels_template").html());
+                     var devicesHtml = devicesTemplate({"devices" : devices});
+                     $("#devices").html(devicesHtml);
+                  },
+                  error : function() {
+                     alert("Failed to load sources list!");
+                  }
+               });
+      };
+
+      function loadChannel(deviceName, channelName) {
+         // find the device and channel
+         var channel = findChannel(devices, deviceName, channelName);
+         if (channel != null) {
+
+            $("#grapherContainer").empty().html(grapherTemplate({"selectedDevice" : channel['deviceName'], "selectedChannel" : channel['name'] })).show();
+
+            dateAxis = new DateAxis("dateAxis", "horizontal", {"min" : channel['min_time'], "max" : channel['max_time']});
+            var datastore = new org.bodytrack.datastore.Datastore("http://localhost:3000/", 1);
+            var channelDatasource = datastore.createChannelDatasource(channel['deviceName'], channel['name']);
+            grapher = new org.bodytrack.grapher.Grapher(channel, channelDatasource, dateAxis, "yAxis1");
+            grapher.addDataPointListener(function(val) {
+               $("#valueLabel").html(val ? val['dateString'] + " " + val['valueString'] : "");
+            });
+            plotContainer = new PlotContainer("pc1", false, [grapher.getPlot()]);
+
+            // set up window resize handler
+            $(window).resize(setSizes);
+
+            // set initial sizes
+            setSizes();
+         }
+      }
+
+      // find the device and channel
+      function findChannel(devicesAndChannels, deviceName, channelName) {
+         if (devicesAndChannels != null) {
+            for (var i = 0; i < devicesAndChannels.length; i++) {
+               var device = devicesAndChannels[i];
+               if (device['name'] == deviceName) {
+                  // we found the device, so try to find the channel
+                  for (var j = 0; j < device['channels'].length; j++) {
+                     var channel = device['channels'][j];
+                     if (channel['name'] == channelName) {
+                        // found the channel, so return it
+                        return channel;
+                     }
+                  }
+               }
+            }
+         }
+
+         return null;
+      }
+
+      function setSizes() {
+         var plotContainerWidth = $(window).width() - 20 - $("#column2").width() - $("#column3").width() - 2;
+         var plotContainerHeight = $("#column1").height() - 2;
+         plotContainer.setSize(plotContainerWidth, plotContainerHeight, SequenceNumber.getNext());
+
+         // resize date axis
+         dateAxis.setSize(plotContainerWidth, $("#dateAxis").height(), SequenceNumber.getNext());
+
+         var yAxisElement = $("#yAxis1");
+         grapher.getYAxis().setSize(yAxisElement.width(), yAxisElement.height(), SequenceNumber.getNext())
+      }
+
+   </script>
+
+   <script id="devices_and_channels_template" type="text/x-handlebars-template">
+      Devices and Channels
+      <ul>
+         {{#each devices}}
+         <li>
+            {{ name }}
+            <ul>
+               {{#each this.channels}}
+               <li><a href="#" onclick="loadChannel('{{ ../name }}','{{ name }}');return false;">{{ name }}</a></li>
+               {{/each}}
+            </ul>
+         </li>
+         {{/each}}
+      </ul>
+   </script>
+
+   <script id="grapher_template" type="text/x-handlebars-template">
+      <h2>{{selectedDevice}}: {{selectedChannel}}</h2>
+      <table id="grapher" class="textSelectionDisabled grapherContainer" border="0" cellpadding="0" cellspacing="0">
+         <tr>
+            <td width="400">
+               <div id="dateAxisContainer">
+                  <div id="dateAxis"></div>
+                  <div id="valueLabel"></div>
+               </div>
+            </td>
+            <td>&nbsp;</td>
+         </tr>
+         <tr>
+            <td width="400" id="column1">
+               <div id="plotContainer1" class="plotContainer">
+                  <div id="pc1" class="plot"></div>
+               </div>
+            </td>
+            <td id="column2" class="axisCell">
+               <div id="yAxisContainer1" class="yAxisContainer">
+                  <div id="yAxis1" class="yAxis"></div>
+               </div>
+            </td>
+         </tr>
+      </table>
+   </script>
+</head>
+<body>
+<h1>Remote Datastore Grapher</h1>
+<div id="grapherContainer" style="display:none; margin-bottom: 20px;"></div>
+<div id="devices"></div>
+</body>
+</html>
