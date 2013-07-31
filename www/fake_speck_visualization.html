@@ -129,7 +129,11 @@
          deviceManager.addActiveDeviceInstallationChangeListener(function(event) {
             // render active/inactive icons
             $.each(event['isDeviceInstallationActive'], function(installationId, isActive) {
-               setMarkerActive(installationId, isActive);
+               // This if statement merely preserves the green pin for the selected marker.  Once we have circles
+               // whose color represents the channel value at the cursor time, then we won't need the if statement.
+               if (installationId != currentlySelectedDeviceInstallationId) {
+                  setMarkerActive(installationId, isActive);
+               }
             });
             isDeviceInstallationActive = event['isDeviceInstallationActive'];
 
