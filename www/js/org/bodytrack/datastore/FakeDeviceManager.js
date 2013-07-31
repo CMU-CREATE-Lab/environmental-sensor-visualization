@@ -74,16 +74,25 @@ if (!org.bodytrack.datastore.ChannelDatasource) {
       var deviceInstallationsFilteredByLocation = {};
       var numDeviceInstallationsFilteredByLocation = 0;
 
+      var currentChannelName = "particles";
       var currentLatLongBounds = null;
       var currentTimeRange = null;              // stores both the current time range and the cursor's position
       var deviceInstallationChangeListeners = [];
       var activeDeviceInstallationChangeListeners = [];
+      var channelChangeListeners = [];
 
-      this.findChannel = function(deviceName, channelName) {
-         if (devicesAndChannels[deviceName]) {
-            return devicesAndChannels[deviceName]['channelsMap'][channelName];
+      this.setCurrentChannelName = function(channelName) {
+         currentChannelName = channelName;
+
+         // publish event
+         var changeEvent = getChannelValuesOfActiveDeviceInstallations();
+         for (var i = 0; i < activeDeviceInstallationChangeListeners.length; i++) {
+            channelChangeListeners[i](changeEvent);
          }
-         return null;
+      };
+
+      this.getCurrentChannelName = function() {
+         return currentChannelName;
       };
 
       this.setLatLongBounds = function(latLongBounds) {
@@ -146,23 +155,33 @@ if (!org.bodytrack.datastore.ChannelDatasource) {
                updateSetOfFilteredDeviceInstallations();
             }
             else if (hasTimeCursorChanged) {
-               // publish event
-               var isDeviceInstallationActive = {};
-               for (var id in filteredDeviceInstallations) {
-                  var installationTimeRange = filteredDeviceInstallations[id]['installation']['time_range'];
-                  var startTimeSecs = installationTimeRange['start_time_secs'];
-                  var endTimeSecs = installationTimeRange['end_time_secs'];
-                  isDeviceInstallationActive[id] = isTimeWithinRange(currentTimeRange['cursorPosition'], startTimeSecs, endTimeSecs);
-               }
-               var changeEvent = {
-                  "isDeviceInstallationActive" : isDeviceInstallationActive
-               };
+               // publish event, including the current channel values
+               var changeEvent = getChannelValuesOfActiveDeviceInstallations();
                for (var i = 0; i < activeDeviceInstallationChangeListeners.length; i++) {
                   activeDeviceInstallationChangeListeners[i](changeEvent);
                }
             }
          }
       };
+
+      var getChannelValuesOfActiveDeviceInstallations = function() {
+         var isDeviceInstallationActive = {};
+         var channelValues = {};
+         for (var id in filteredDeviceInstallations) {
+            var installationTimeRange = filteredDeviceInstallations[id]['installation']['time_range'];
+            var startTimeSecs = installationTimeRange['start_time_secs'];
+            var endTimeSecs = installationTimeRange['end_time_secs'];
+            var isActive = isTimeWithinRange(currentTimeRange['cursorPosition'], startTimeSecs, endTimeSecs);
+            isDeviceInstallationActive[id] = isActive;
+            if (isActive) {
+               channelValues[id] = getValueAtTime(filteredDeviceInstallations[id]['device']['name'], currentChannelName, currentTimeRange['cursorPosition']);
+            }
+         }
+         return {
+            "isDeviceInstallationActive" : isDeviceInstallationActive,
+            "channelValues" : channelValues
+         };
+      }
 
       this.getChannelDatasource = function(deviceName, channelName) {
          return devicesAndChannels[deviceName]['channelsMap'][channelName][DATASOURCE_KEY];
@@ -177,6 +196,12 @@ if (!org.bodytrack.datastore.ChannelDatasource) {
       this.addActiveDeviceInstallationChangeListener = function(listener) {
          if (typeof listener === 'function') {
             activeDeviceInstallationChangeListeners.push(listener);
+         }
+      }
+
+      this.addChannelChangeListener = function(listener) {
+         if (typeof listener === 'function') {
+            channelChangeListeners.push(listener);
          }
       }
 
@@ -305,7 +330,6 @@ if (!org.bodytrack.datastore.ChannelDatasource) {
                }
             }
          }
-         console.log("Checking [" + deviceName + "] and [" + timeInSecs + "]");
          return false;
       };
 

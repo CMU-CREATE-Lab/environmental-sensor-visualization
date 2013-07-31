@@ -41,6 +41,7 @@
 
       var map;
       var markers = {};
+      var deviceInstallations = {};
       var currentlySelectedMarker = null;
       var currentlySelectedDeviceInstallationId = null;
       var isDeviceInstallationActive = {};
@@ -78,6 +79,8 @@
                                           currentlySelectedMarker = marker;
                                           currentlySelectedDeviceInstallationId = id;
                                           currentlySelectedMarker.setOptions({ icon : selectedMarkerIcon });
+
+                                          loadChannel(currentlySelectedDeviceInstallationId);
                                        });
          markers[id] = marker;
          setMarkerActive(id, isActive);
@@ -87,25 +90,40 @@
          markers[id].setOptions({ icon : isActive ? activeMarkerIcon : inactiveMarkerIcon });
       }
 
+      function renderChannelValuesOnMap(channelValues) {
+         // TODO: actually render them instead of just logging to console
+         $.each(channelValues, function(installationId, value) {
+            console.log("[" + installationId + "]=[" + value + "]");
+         });
+
+      }
       window.grapherLoad = function() {
+         $("#channel_selector").change(function() {
+            datastore.setCurrentChannelName(this.value);
+         });
+
          // create the FakeDatastore
          datastore = new org.bodytrack.datastore.FakeDeviceManager();
+         datastore.setCurrentChannelName($("#channel_selector").val());          // initialize the channel
          datastore.addDeviceInstallationChangeListener(function(event) {
             // add new active device installations to the map
             $.each(event['addedActive'], function(installationId, deviceInstallation) {
                var location = deviceInstallation['installation']['location']['latLong'];
                addMarker(installationId, location, true);
+               deviceInstallations[installationId] = deviceInstallation;
             });
             // add new inactive device installations to the map
             $.each(event['addedInactive'], function(installationId, deviceInstallation) {
                var location = deviceInstallation['installation']['location']['latLong'];
                addMarker(installationId, location, false);
+               deviceInstallations[installationId] = deviceInstallation;
             });
 
             // delete removed device installations
-            $.each(event['removedIds'], function(index, id) {
-               markers[id].setMap(null);
-               delete markers[id];
+            $.each(event['removedIds'], function(index, installationId) {
+               markers[installationId].setMap(null);
+               delete markers[installationId];
+               delete deviceInstallations[installationId];
             });
          });
          datastore.addActiveDeviceInstallationChangeListener(function(event) {
@@ -114,6 +132,19 @@
                setMarkerActive(installationId, isActive);
             });
             isDeviceInstallationActive = event['isDeviceInstallationActive'];
+
+            // render the values on the map
+
+            renderChannelValuesOnMap(event['channelValues']);
+         });
+         datastore.addChannelChangeListener(function(event) {
+
+            // change the graph, if there is one currently being displayed
+            if (currentlySelectedDeviceInstallationId != null) {
+               loadChannel(currentlySelectedDeviceInstallationId);
+            }
+
+            renderChannelValuesOnMap(event['channelValues']);
          });
 
          initializeMap();
@@ -143,13 +174,17 @@
          $("#grapher_area").show();
       };
 
-      function loadChannel(deviceName, channelName) {
+      function loadChannel(deviceInstallationId) {
+         var deviceInstallation = deviceInstallations[deviceInstallationId];
+         var deviceName = deviceInstallation['device']['name'];
+         var channelName = datastore.getCurrentChannelName();
+
          // find the device and channel
-         var channel = datastore.findChannel(deviceName, channelName);
+         var channel = deviceInstallation['device']['channelsMap'][channelName];
          if (channel != null) {
 
             $("#grapherContainer").empty().html(grapherTemplate({"selectedDevice" : deviceName, "selectedChannel" : channelName })).show();
-            $("#channelInfo").empty().html(channelInfoTemplate({"channel" : channel, "deviceName" : deviceName})).show();
+            $("#channelInfo").empty().html(channelInfoTemplate({"channel" : channel, "deviceInstallation" : deviceInstallations[deviceInstallationId]})).show();
 
             var channelDatasource = datastore.getChannelDatasource(deviceName, channelName);
             grapher = new org.bodytrack.grapher.Grapher(channel, channelDatasource, dateAxis, "yAxis1");
@@ -195,12 +230,16 @@
    </script>
 
    <script id="channel_info_template" type="text/x-handlebars-template">
-      <h2>{{deviceName}}: {{channel.name}}</h2>
-      <!-- TODO: add other channel info here?  Maybe lat/long, owner, time range at this location, etc.? -->
+      <h2>{{deviceInstallation.device.name}}: {{channel.name}}</h2>
+      Location: {{ deviceInstallation.installation.location.name }}
    </script>
 </head>
 <body>
 <h1>Fake Speck Visualization</h1>
+<select id="channel_selector">
+   <option value="particles">particles</option>
+   <option value="temperature">temperature</option>
+</select>
 <div id="grapher_area" class="textSelectionDisabled">
    <table id="grapher" border="0" cellpadding="0" cellspacing="0">
       <tr>
