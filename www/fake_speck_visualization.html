@@ -6,6 +6,7 @@
    <style type="text/css">
       #mapArea {
          border: 1px solid black;
+         width: auto;
          height: 300px;
          background-color: lightcyan;
       }
@@ -18,12 +19,12 @@
          display: none;
       }
    </style>
+   <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCGR21nG0gjPnQZtlCbPIxpDcJ2T2fOrf8&sensor=false"></script>
    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
    <script src="js/handlebars.js"></script>
    <script src="js/org/bodytrack/grapher/gwt/grapher2.nocache.js"></script>
    <script src="js/org/bodytrack/datastore/ChannelDatasource.js"></script>
-   <script src="js/org/bodytrack/datastore/FakeDevicesAndChannels.js"></script>
-   <script src="js/org/bodytrack/datastore/FakeDatastore.js"></script>
+   <script src="js/org/bodytrack/datastore/FakeDeviceManager.js"></script>
    <script src="js/org/bodytrack/grapher/Grapher.js"></script>
    <script language="JavaScript" type="text/javascript">
 
@@ -38,36 +39,98 @@
       var grapher;
       var plotContainer;
 
-      var channels;
+      var map;
+      var markers = {};
+      var currentlySelectedMarker = null;
+      var currentlySelectedDeviceInstallationId = null;
+      var isDeviceInstallationActive = {};
+      var activeMarkerIcon = "http://www.google.com/intl/en_us/mapfiles/ms/micons/blue-dot.png";
+      var inactiveMarkerIcon = "http://www.google.com/intl/en_us/mapfiles/ms/micons/red-dot.png";
+      var selectedMarkerIcon = "http://www.google.com/intl/en_us/mapfiles/ms/micons/green-dot.png";
+
+      function initializeMap() {
+         var mapOptions = {
+            center : new google.maps.LatLng(40.44339, -79.94439),
+            zoom : 15,
+            mapTypeId : google.maps.MapTypeId.ROADMAP
+         };
+         map = new google.maps.Map(document.getElementById("mapArea"), mapOptions);
+         google.maps.event.addListener(map, 'bounds_changed', function() {
+            datastore.setLatLongBounds(map.getBounds());
+         });
+      }
+
+      // Add a marker to the map and push to the array.
+      function addMarker(id, location, isActive) {
+         var marker = new google.maps.Marker({
+                                                position : location,
+                                                map : map,
+                                                icon : activeMarkerIcon
+                                             });
+         google.maps.event.addListener(marker,
+                                       'click',
+                                       function() {
+                                          // de-select the previously-selected marker, if any
+                                          if (currentlySelectedMarker != null) {
+                                             setMarkerActive(currentlySelectedDeviceInstallationId, isDeviceInstallationActive[currentlySelectedDeviceInstallationId]);
+                                          }
+                                          // make this marker the current one, then set the icon
+                                          currentlySelectedMarker = marker;
+                                          currentlySelectedDeviceInstallationId = id;
+                                          currentlySelectedMarker.setOptions({ icon : selectedMarkerIcon });
+                                       });
+         markers[id] = marker;
+         setMarkerActive(id, isActive);
+      }
+
+      function setMarkerActive(id, isActive) {
+         markers[id].setOptions({ icon : isActive ? activeMarkerIcon : inactiveMarkerIcon });
+      }
 
       window.grapherLoad = function() {
-         // create the FakeDatastore and initialize it with the fake devices and channels
-         datastore = new org.bodytrack.datastore.FakeDatastore(FAKE_DEVICES_AND_CHANNELS);
+         // create the FakeDatastore
+         datastore = new org.bodytrack.datastore.FakeDeviceManager();
+         datastore.addDeviceInstallationChangeListener(function(event) {
+            // add new active device installations to the map
+            $.each(event['addedActive'], function(installationId, deviceInstallation) {
+               var location = deviceInstallation['installation']['location']['latLong'];
+               addMarker(installationId, location, true);
+            });
+            // add new inactive device installations to the map
+            $.each(event['addedInactive'], function(installationId, deviceInstallation) {
+               var location = deviceInstallation['installation']['location']['latLong'];
+               addMarker(installationId, location, false);
+            });
+
+            // delete removed device installations
+            $.each(event['removedIds'], function(index, id) {
+               markers[id].setMap(null);
+               delete markers[id];
+            });
+         });
+         datastore.addActiveDeviceInstallationChangeListener(function(event) {
+            // render active/inactive icons
+            $.each(event['isDeviceInstallationActive'], function(installationId, isActive) {
+               setMarkerActive(installationId, isActive);
+            });
+            isDeviceInstallationActive = event['isDeviceInstallationActive'];
+         });
+
+         initializeMap();
 
          // compile the templates for later use
          grapherTemplate = Handlebars.compile($("#grapher_template").html());
          channelInfoTemplate = Handlebars.compile($("#channel_info_template").html());
 
-         // render the devices and channels
-         var devicesTemplate = Handlebars.compile($("#devices_and_channels_template").html());
-         var devicesHtml = devicesTemplate({"devices" : FAKE_DEVICES_AND_CHANNELS});
-         $("#devices").html(devicesHtml);
-
          // initialize the DateAxis
          dateAxis = new DateAxis("dateAxis", "horizontal", {"min" : today, "max" : tomorrow});
          dateAxis.setCursorPosition((dateAxis.getMax() + dateAxis.getMin()) / 2);   // set initial cursor to the middle
          dateAxis.addAxisChangeListener(function(cursorChangeEvent) {
-            var time = cursorChangeEvent['cursorPosition'];
-
-            // iterate over the devices and channels and render their values at the selected time
-            for (var i = 0; i < FAKE_DEVICES_AND_CHANNELS.length; i++) {
-               var device = FAKE_DEVICES_AND_CHANNELS[i];
-               for (var j = 0; j < device['channels'].length; j++) {
-                  var channel = device['channels'][j];
-                  var value = datastore.getValueAtTime(device['name'], channel['name'], time);
-                  $("#value_for_" + device['name'] + "_" + channel['name']).text(value.toFixed(3));
-               }
-            }
+            datastore.setTimeRange({
+                                      "min" : cursorChangeEvent['min'],
+                                      "max" : cursorChangeEvent['max'],
+                                      "cursorPosition" : cursorChangeEvent['cursorPosition']
+                                   });
          });
 
          // set initial sizes
@@ -78,18 +141,17 @@
 
          // show the grapher area
          $("#grapher_area").show();
-
       };
 
       function loadChannel(deviceName, channelName) {
          // find the device and channel
-         var channel = findChannel(FAKE_DEVICES_AND_CHANNELS, deviceName, channelName);
+         var channel = datastore.findChannel(deviceName, channelName);
          if (channel != null) {
 
             $("#grapherContainer").empty().html(grapherTemplate({"selectedDevice" : deviceName, "selectedChannel" : channelName })).show();
             $("#channelInfo").empty().html(channelInfoTemplate({"channel" : channel, "deviceName" : deviceName})).show();
 
-            var channelDatasource = datastore.getDatasource(deviceName, channelName);
+            var channelDatasource = datastore.getChannelDatasource(deviceName, channelName);
             grapher = new org.bodytrack.grapher.Grapher(channel, channelDatasource, dateAxis, "yAxis1");
             grapher.addDataPointListener(function(val, eventType) {
                $("#valueLabel").html(val ? val['dateString'] + " " + val['valueString'] : "");
@@ -99,27 +161,6 @@
             // set initial sizes
             setSizes();
          }
-      }
-
-      // find the device and channel
-      function findChannel(devicesAndChannels, deviceName, channelName) {
-         if (devicesAndChannels != null) {
-            for (var i = 0; i < devicesAndChannels.length; i++) {
-               var device = devicesAndChannels[i];
-               if (device['name'] == deviceName) {
-                  // we found the device, so try to find the channel
-                  for (var j = 0; j < device['channels'].length; j++) {
-                     var channel = device['channels'][j];
-                     if (channel['name'] == channelName) {
-                        // found the channel, so return it
-                        return channel;
-                     }
-                  }
-               }
-            }
-         }
-
-         return null;
       }
 
       function setSizes() {
@@ -138,25 +179,6 @@
             grapher.getYAxis().setSize(yAxisElement.width(), yAxisElement.height(), SequenceNumber.getNext())
          }
       }
-   </script>
-
-   <script id="devices_and_channels_template" type="text/x-handlebars-template">
-      Devices and Channels
-      <ul>
-         {{#each devices}}
-         <li>
-            {{ name }}
-            <ul>
-               {{#each this.channels}}
-               <li>
-                  <a href="#" onclick="loadChannel('{{ ../name }}','{{ name }}');return false;">{{ name }}</a>
-                  (<span id="value_for_{{ ../name }}_{{ name }}"></span>)
-               </li>
-               {{/each}}
-            </ul>
-         </li>
-         {{/each}}
-      </ul>
    </script>
 
    <script id="grapher_template" type="text/x-handlebars-template">
@@ -179,7 +201,6 @@
 </head>
 <body>
 <h1>Fake Speck Visualization</h1>
-<div id="devices"></div>
 <div id="grapher_area" class="textSelectionDisabled">
    <table id="grapher" border="0" cellpadding="0" cellspacing="0">
       <tr>
