@@ -34,7 +34,7 @@
 
       var grapherTemplate = null;
       var channelInfoTemplate = null;
-      var datastore;
+      var deviceManager;
       var dateAxis;
       var grapher;
       var plotContainer;
@@ -57,7 +57,7 @@
          };
          map = new google.maps.Map(document.getElementById("mapArea"), mapOptions);
          google.maps.event.addListener(map, 'bounds_changed', function() {
-            datastore.setLatLongBounds(map.getBounds());
+            deviceManager.setLatLongBounds(map.getBounds());
          });
       }
 
@@ -99,13 +99,13 @@
       }
       window.grapherLoad = function() {
          $("#channel_selector").change(function() {
-            datastore.setCurrentChannelName(this.value);
+            deviceManager.setCurrentChannelName(this.value);
          });
 
-         // create the FakeDatastore
-         datastore = new org.bodytrack.datastore.FakeDeviceManager();
-         datastore.setCurrentChannelName($("#channel_selector").val());          // initialize the channel
-         datastore.addDeviceInstallationChangeListener(function(event) {
+         // create and configure the FakeDeviceManager
+         deviceManager = new org.bodytrack.datastore.FakeDeviceManager();
+         deviceManager.setCurrentChannelName($("#channel_selector").val());          // initialize the channel
+         deviceManager.addDeviceInstallationChangeListener(function(event) {
             // add new active device installations to the map
             $.each(event['addedActive'], function(installationId, deviceInstallation) {
                var location = deviceInstallation['installation']['location']['latLong'];
@@ -126,19 +126,16 @@
                delete deviceInstallations[installationId];
             });
          });
-         datastore.addActiveDeviceInstallationChangeListener(function(event) {
+         deviceManager.addActiveDeviceInstallationChangeListener(function(event) {
             // render active/inactive icons
             $.each(event['isDeviceInstallationActive'], function(installationId, isActive) {
                setMarkerActive(installationId, isActive);
             });
             isDeviceInstallationActive = event['isDeviceInstallationActive'];
 
-            // render the values on the map
-
             renderChannelValuesOnMap(event['channelValues']);
          });
-         datastore.addChannelChangeListener(function(event) {
-
+         deviceManager.addChannelChangeListener(function(event) {
             // change the graph, if there is one currently being displayed
             if (currentlySelectedDeviceInstallationId != null) {
                loadChannel(currentlySelectedDeviceInstallationId);
@@ -157,11 +154,11 @@
          dateAxis = new DateAxis("dateAxis", "horizontal", {"min" : today, "max" : tomorrow});
          dateAxis.setCursorPosition((dateAxis.getMax() + dateAxis.getMin()) / 2);   // set initial cursor to the middle
          dateAxis.addAxisChangeListener(function(cursorChangeEvent) {
-            datastore.setTimeRange({
-                                      "min" : cursorChangeEvent['min'],
-                                      "max" : cursorChangeEvent['max'],
-                                      "cursorPosition" : cursorChangeEvent['cursorPosition']
-                                   });
+            deviceManager.setTimeRange({
+                                          "min" : cursorChangeEvent['min'],
+                                          "max" : cursorChangeEvent['max'],
+                                          "cursorPosition" : cursorChangeEvent['cursorPosition']
+                                       });
          });
 
          // set initial sizes
@@ -177,7 +174,7 @@
       function loadChannel(deviceInstallationId) {
          var deviceInstallation = deviceInstallations[deviceInstallationId];
          var deviceName = deviceInstallation['device']['name'];
-         var channelName = datastore.getCurrentChannelName();
+         var channelName = deviceManager.getCurrentChannelName();
 
          // find the device and channel
          var channel = deviceInstallation['device']['channelsMap'][channelName];
@@ -186,7 +183,7 @@
             $("#grapherContainer").empty().html(grapherTemplate({"selectedDevice" : deviceName, "selectedChannel" : channelName })).show();
             $("#channelInfo").empty().html(channelInfoTemplate({"channel" : channel, "deviceInstallation" : deviceInstallations[deviceInstallationId]})).show();
 
-            var channelDatasource = datastore.getChannelDatasource(deviceName, channelName);
+            var channelDatasource = deviceManager.getChannelDatasource(deviceName, channelName);
             grapher = new org.bodytrack.grapher.Grapher(channel, channelDatasource, dateAxis, "yAxis1");
             grapher.addDataPointListener(function(val, eventType) {
                $("#valueLabel").html(val ? val['dateString'] + " " + val['valueString'] : "");
