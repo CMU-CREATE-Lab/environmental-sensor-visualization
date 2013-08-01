@@ -86,7 +86,7 @@ if (!org.bodytrack.datastore.ChannelDatasource) {
 
          // publish event
          var changeEvent = getChannelValuesOfActiveDeviceInstallations();
-         for (var i = 0; i < activeDeviceInstallationChangeListeners.length; i++) {
+         for (var i = 0; i < channelChangeListeners.length; i++) {
             channelChangeListeners[i](changeEvent);
          }
       };
@@ -163,6 +163,10 @@ if (!org.bodytrack.datastore.ChannelDatasource) {
             }
          }
       };
+
+      this.getDeviceInstallationActivityStatus = function() {
+         return getChannelValuesOfActiveDeviceInstallations();
+      }
 
       var getChannelValuesOfActiveDeviceInstallations = function() {
          var isDeviceInstallationActive = {};
@@ -397,6 +401,20 @@ if (!org.bodytrack.datastore.ChannelDatasource) {
       // current time, or noon today, whichever is earlier
       var __speck2MaxTime = Math.min(__now.getTime() / 1000, new Date(__now.getFullYear(), __now.getMonth(), __now.getDate(), 12, 0, 0).getTime() / 1000);
 
+      // three weeks ago
+      var __speck3MinTime = new Date(__now.getFullYear(), __now.getMonth(), __now.getDate()-21, 0, 0, 0).getTime() / 1000;
+      // one week ago
+      var __speck3MaxTime = new Date(__now.getFullYear(), __now.getMonth(), __now.getDate()-7, 0, 0, 0).getTime() / 1000;
+
+      // one year ago
+      var __speck4MinTime = new Date(__now.getFullYear()-1, __now.getMonth(), __now.getDate(), 0, 0, 0).getTime() / 1000;
+      // one month ago
+      var __speck4MaxTime = new Date(__now.getFullYear(), __now.getMonth()-1, __now.getDate(), 0, 0, 0).getTime() / 1000;
+
+      // one day ago
+      var __speck5MinTime = new Date(__now.getFullYear(), __now.getMonth(), __now.getDate()-1, 0, 0, 0).getTime() / 1000;
+
+
       var DEVICE_METADATA = [
          {
             "name" : "Speck1",
@@ -453,6 +471,57 @@ if (!org.bodytrack.datastore.ChannelDatasource) {
                   }
                }
             ]
+         },
+         {
+            "name" : "Speck3",
+            "installations" : [
+               {
+                  "id" : 4,
+                  "time_range" : {
+                     "start_time_secs" : __speck3MinTime,
+                     "end_time_secs" : __speck3MaxTime
+                  },
+                  "location" : {
+                     "name" : "Kraus Campo",
+                     "lat" : 40.44146,
+                     "lon" :  -79.94250
+                  }
+               }
+            ]
+         },
+         {
+            "name" : "Speck4",
+            "installations" : [
+               {
+                  "id" : 5,
+                  "time_range" : {
+                     "start_time_secs" : __speck4MinTime,
+                     "end_time_secs" : __speck4MaxTime
+                  },
+                  "location" : {
+                     "name" : "Phipps Conservatory and Botanical Gardens",
+                     "lat" : 40.43907,
+                     "lon" :  -79.94806
+                  }
+               }
+            ]
+         },
+         {
+            "name" : "Speck5",
+            "installations" : [
+               {
+                  "id" : 6,
+                  "time_range" : {
+                     "start_time_secs" : __speck5MinTime,
+                     "end_time_secs" : null
+                  },
+                  "location" : {
+                     "name" : "Cathredral of Learning",
+                     "lat" : 40.44429,
+                     "lon" :  -79.95321
+                  }
+               }
+            ]
          }
       ];
 
@@ -467,16 +536,8 @@ if (!org.bodytrack.datastore.ChannelDatasource) {
                   "min_time" : __speck1MinTime,
                   "max_time" : __now,
                   "time_type" : "gmt",
-                  "style" : {
-                     "styles" : [
-                        {"type" : "line", "lineWidth" : 1, "show" : true}
-                     ]
-                  },
-                  "builtin_default_style" : {
-                     "styles" : [
-                        {"type" : "line", "lineWidth" : 1, "show" : true}
-                     ]
-                  },
+                  "style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
+                  "builtin_default_style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
                   "value_function" : function(timeInSecs) {
                      return (Math.sin(timeInSecs * 0.00009) + 1) * 10 + 60; // varies the value between [60,80]
                   }
@@ -488,16 +549,8 @@ if (!org.bodytrack.datastore.ChannelDatasource) {
                   "min_time" : __speck1MinTime,
                   "max_time" : __now,
                   "time_type" : "gmt",
-                  "style" : {
-                     "styles" : [
-                        {"type" : "line", "lineWidth" : 1, "show" : true}
-                     ]
-                  },
-                  "builtin_default_style" : {
-                     "styles" : [
-                        {"type" : "line", "lineWidth" : 1, "show" : true}
-                     ]
-                  },
+                  "style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
+                  "builtin_default_style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
                   "value_function" : function(timeInSecs) {
                      return (timeInSecs % 43200) / 43200 * 100; // varies the value between [0,100]
                   }
@@ -514,16 +567,8 @@ if (!org.bodytrack.datastore.ChannelDatasource) {
                   "min_time" : __speck2MinTime,
                   "max_time" : __speck2MaxTime,
                   "time_type" : "gmt",
-                  "style" : {
-                     "styles" : [
-                        {"type" : "line", "lineWidth" : 1, "show" : true}
-                     ]
-                  },
-                  "builtin_default_style" : {
-                     "styles" : [
-                        {"type" : "line", "lineWidth" : 1, "show" : true}
-                     ]
-                  },
+                  "style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
+                  "builtin_default_style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
                   "value_function" : function(timeInSecs) {
                      return (Math.cos(timeInSecs * 0.00009) + 1) * 10 + 40; // varies the value between [40,60]
                   }
@@ -535,18 +580,103 @@ if (!org.bodytrack.datastore.ChannelDatasource) {
                   "min_time" : __speck2MinTime,
                   "max_time" : __speck2MaxTime,
                   "time_type" : "gmt",
-                  "style" : {
-                     "styles" : [
-                        {"type" : "line", "lineWidth" : 1, "show" : true}
-                     ]
-                  },
-                  "builtin_default_style" : {
-                     "styles" : [
-                        {"type" : "line", "lineWidth" : 1, "show" : true}
-                     ]
-                  },
+                  "style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
+                  "builtin_default_style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
                   "value_function" : function(timeInSecs) {
                      return (timeInSecs % 86400) / 86400 * 50 + 20; // varies the value between [20,70]
+                  }
+               }
+            ]
+         },
+         {
+            "name" : "Speck3",
+            "channels" : [
+               {
+                  "name" : "particles",
+                  "min" : 50,
+                  "max" : 70,
+                  "min_time" : __speck3MinTime,
+                  "max_time" : __speck3MaxTime,
+                  "time_type" : "gmt",
+                  "style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
+                  "builtin_default_style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
+                  "value_function" : function(timeInSecs) {
+                     return (Math.cos(timeInSecs * 0.00009) + 1) * 10 + 50; // varies the value between [50,70]
+                  }
+               },
+               {
+                  "name" : "temperature",
+                  "min" : 0,
+                  "max" : 50,
+                  "min_time" : __speck3MinTime,
+                  "max_time" : __speck3MaxTime,
+                  "time_type" : "gmt",
+                  "style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
+                  "builtin_default_style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
+                  "value_function" : function(timeInSecs) {
+                     return (timeInSecs % 86400) / 86400 * 50; // varies the value between [0,50]
+                  }
+               }
+            ]
+         },
+         {
+            "name" : "Speck4",
+            "channels" : [
+               {
+                  "name" : "particles",
+                  "min" : 10,
+                  "max" : 30,
+                  "min_time" : __speck4MinTime,
+                  "max_time" : __speck4MaxTime,
+                  "time_type" : "gmt",
+                  "style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
+                  "builtin_default_style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
+                  "value_function" : function(timeInSecs) {
+                     return (Math.cos(timeInSecs * 0.00009) + 1) * 10 + 10; // varies the value between [10,30]
+                  }
+               },
+               {
+                  "name" : "temperature",
+                  "min" : 30,
+                  "max" : 80,
+                  "min_time" : __speck4MinTime,
+                  "max_time" : __speck4MaxTime,
+                  "time_type" : "gmt",
+                  "style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
+                  "builtin_default_style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
+                  "value_function" : function(timeInSecs) {
+                     return (timeInSecs % 86400) / 86400 * 50 + 30; // varies the value between [30,80]
+                  }
+               }
+            ]
+         },
+         {
+            "name" : "Speck5",
+            "channels" : [
+               {
+                  "name" : "particles",
+                  "min" : 10,
+                  "max" : 30,
+                  "min_time" : __speck5MinTime,
+                  "max_time" : __now,
+                  "time_type" : "gmt",
+                  "style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
+                  "builtin_default_style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
+                  "value_function" : function(timeInSecs) {
+                     return (Math.cos(timeInSecs * 0.00009) + 1) * 10 + 10; // varies the value between [10,30]
+                  }
+               },
+               {
+                  "name" : "temperature",
+                  "min" : 30,
+                  "max" : 80,
+                  "min_time" : __speck5MinTime,
+                  "max_time" : __now,
+                  "time_type" : "gmt",
+                  "style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
+                  "builtin_default_style" : { "styles" : [ {"type" : "line", "lineWidth" : 1, "show" : true} ] },
+                  "value_function" : function(timeInSecs) {
+                     return (timeInSecs % 86400) / 86400 * 50 + 30; // varies the value between [30,80]
                   }
                }
             ]
@@ -555,6 +685,4 @@ if (!org.bodytrack.datastore.ChannelDatasource) {
 
       initialize();
    };
-
 })();
-

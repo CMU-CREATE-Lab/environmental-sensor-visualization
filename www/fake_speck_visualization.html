@@ -59,6 +59,16 @@
          google.maps.event.addListener(map, 'bounds_changed', function() {
             deviceManager.setLatLongBounds(map.getBounds());
          });
+
+         // Add an idle event listener ONCE to handle map loading.
+         google.maps.event.addListenerOnce(map, 'idle', function() {
+            console.log("Map is done loading");
+
+            // The map is done loading, so we need to get the device installation activity status
+            // now so that we can set the initial color of the markers appropriately.
+            var status = deviceManager.getDeviceInstallationActivityStatus();
+            updateMarkerActivityState(status['isDeviceInstallationActive']);
+         });
       }
 
       // Add a marker to the map and push to the array.
@@ -95,8 +105,20 @@
          $.each(channelValues, function(installationId, value) {
             console.log("[" + installationId + "]=[" + value + "]");
          });
-
       }
+
+      var updateMarkerActivityState = function(isDeviceInstallationActiveMap) {
+         // render active/inactive icons
+         $.each(isDeviceInstallationActiveMap, function(installationId, isActive) {
+            // This if statement merely preserves the green pin for the selected marker.  Once we have circles
+            // whose color represents the channel value at the cursor time, then we won't need the if statement.
+            if (installationId != currentlySelectedDeviceInstallationId) {
+               setMarkerActive(installationId, isActive);
+            }
+         });
+         isDeviceInstallationActive = isDeviceInstallationActiveMap;
+      };
+
       window.grapherLoad = function() {
          $("#channel_selector").change(function() {
             deviceManager.setCurrentChannelName(this.value);
@@ -104,7 +126,6 @@
 
          // create and configure the FakeDeviceManager
          deviceManager = new org.bodytrack.datastore.FakeDeviceManager();
-         deviceManager.setCurrentChannelName($("#channel_selector").val());          // initialize the channel
          deviceManager.addDeviceInstallationChangeListener(function(event) {
             // add new active device installations to the map
             $.each(event['addedActive'], function(installationId, deviceInstallation) {
@@ -128,18 +149,14 @@
          });
          deviceManager.addActiveDeviceInstallationChangeListener(function(event) {
             // render active/inactive icons
-            $.each(event['isDeviceInstallationActive'], function(installationId, isActive) {
-               // This if statement merely preserves the green pin for the selected marker.  Once we have circles
-               // whose color represents the channel value at the cursor time, then we won't need the if statement.
-               if (installationId != currentlySelectedDeviceInstallationId) {
-                  setMarkerActive(installationId, isActive);
-               }
-            });
-            isDeviceInstallationActive = event['isDeviceInstallationActive'];
+            updateMarkerActivityState(event['isDeviceInstallationActive']);
 
             renderChannelValuesOnMap(event['channelValues']);
          });
          deviceManager.addChannelChangeListener(function(event) {
+            // render active/inactive icons
+            updateMarkerActivityState(event['isDeviceInstallationActive']);
+
             // change the graph, if there is one currently being displayed
             if (currentlySelectedDeviceInstallationId != null) {
                loadChannel(currentlySelectedDeviceInstallationId);
@@ -156,7 +173,6 @@
 
          // initialize the DateAxis
          dateAxis = new DateAxis("dateAxis", "horizontal", {"min" : today, "max" : tomorrow});
-         dateAxis.setCursorPosition((dateAxis.getMax() + dateAxis.getMin()) / 2);   // set initial cursor to the middle
          dateAxis.addAxisChangeListener(function(cursorChangeEvent) {
             deviceManager.setTimeRange({
                                           "min" : cursorChangeEvent['min'],
@@ -165,14 +181,22 @@
                                        });
          });
 
+         deviceManager.setLatLongBounds(map.getBounds());
+
+         // set initial cursor to the current time
+         dateAxis.setCursorPosition(new Date().getTime()/1000);
+
+         // now that all the initial config is done, set the current channel
+         deviceManager.setCurrentChannelName($("#channel_selector").val());         // initialize the channel
+
+         // show the grapher area
+         $("#grapher_area").show();
+
          // set initial sizes
          setSizes();
 
          // set up window resize handler
          $(window).resize(setSizes);
-
-         // show the grapher area
-         $("#grapher_area").show();
       };
 
       function loadChannel(deviceInstallationId) {
