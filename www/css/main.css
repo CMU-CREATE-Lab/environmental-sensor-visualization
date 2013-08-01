@@ -61,10 +61,11 @@ body {
 }
 
 #valueLabel {
+   color: #666666;
    width: auto;
    min-width: 200px;
    text-align: right;
    padding: 0 5px 0 5px;
-   margin-top: -20px;
+   margin-top: -25px;
    z-index: 1;
 }
