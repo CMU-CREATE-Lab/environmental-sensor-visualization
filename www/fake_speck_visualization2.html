@@ -38,13 +38,10 @@
       var currentlySelectedMarker = null;
       var currentlySelectedDeviceInstallationId = null;
       var isDeviceInstallationActive = {};
-      var activeMarkerIcon = "http://www.google.com/intl/en_us/mapfiles/ms/micons/blue-dot.png";
-      var inactiveMarkerIcon = "http://www.google.com/intl/en_us/mapfiles/ms/micons/red-dot.png";
-      var selectedMarkerIcon = "http://www.google.com/intl/en_us/mapfiles/ms/micons/green-dot.png";
-      var activeMarkerColor = '#B1D7D7';
-      var activeMarkerColorCenter = '#63BDC9';
-      var inactiveMarkerColor = '#E7D1B7';
-      var inactiveMarkerColorCenter = '#E83015';
+      var inactiveMarkerColor = '#B1D7D7';
+      var inactiveMarkerColorCenter = '#63BDC9';
+      var activeMarkerColor = '#E7D1B7';
+      var activeMarkerColorCenter = '#E83015';
       var selectedMarkerColor = '#86BD6F';
       var selectedMarkerColorCenter = '#7BA23F';
 
@@ -132,7 +129,24 @@
          // TODO: actually render them instead of just logging to console
          $.each(channelValues, function(installationId, value) {
             console.log("[" + installationId + "]=[" + value + "]");
+            updateColor(installationId, value);
          });
+      }
+
+      function updateColor(id, value){
+         var isActive = isDeviceInstallationActive[id];
+
+         if(value > 90)
+            value = 90;
+         else if(value < 0)
+            value = 0;
+
+         var r = Math.floor((255 * value) / 90),
+             g = Math.floor((255 * value) / 90),
+             b = 200;
+
+         markers[id].setOptions({ fillColor : isActive ? "rgb(" + r + "," + g + "," + b + ")" : inactiveMarkerColor });
+         markersCenters[id].setOptions({fillColor : isActive ? "rgb(" + r + "," + g + "," + b + ")" : inactiveMarkerColorCenter});
       }
 
       var updateMarkerActivityState = function(isDeviceInstallationActiveMap) {
@@ -336,12 +350,7 @@
    <div id="mapArea">Map goes here</div>
 <div id="grapher_area" class="textSelectionDisabled">
    <table id="grapher" border="0" cellpadding="0" cellspacing="0">
-      <tr>
-         <td width="400">
-            
-         </td>
-         <td>&nbsp;</td>
-      </tr>
+      
       <tr>
          <td width="400">
             <div id="dateAxisContainer">
