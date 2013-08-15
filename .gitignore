@@ -1,2 +1,18 @@
 .DS_Store
 *.iws
+app.js
+routes
+routes/*
+views/*.hjs
+views
+www/js/grapher4
+www/js/grapher4/*
+www/js/bodytrack_grapher.js
+node_modules
+node_modules/*
+etc
+etc/*
+datastore
+datastore/*
+Node\ Datastore\ Server.*
+package.json

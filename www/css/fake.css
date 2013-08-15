@@ -1,0 +1,181 @@
+/* css reset */
+/* Accessible focus treatment
+   people.opera.com/patrickl/experiments/keyboard/test */
+a:hover, a:active {outline: none;}
+
+small {font-size: 85%;}
+
+strong, th {font-weight: bold;}
+
+
+
+/* force a vertical scrollbar to prevent a jumpy page  ----------------*/
+html {overflow-y: scroll;}
+
+/* global font style   ------------------------------------------------*/
+body {
+   font-family: "Pontano Sans",Helvetica,Arial,sans-serif;
+   font-size:16px;
+}
+
+/* global a style      ------------------------------------------------*/
+a {
+   margin: 0; 
+   padding: 0; 
+   font-size: 100%; 
+   vertical-align: baseline; 
+   background: transparent;
+   text-decoration:none
+}
+
+/* hand cursor on clickable elements ----------------------------------*/
+.clickable,
+label, 
+input[type=button], 
+input[type=submit], 
+button {cursor: pointer;}
+
+
+/* Prvent text selection (found at http://wiki.phonegap.com/iPhone:-Prevent-copy-paste and http://stackoverflow.com/questions/7059039/how-to-prevent-accidental-select-drag-highlight-on-webpage-when-drawing-off-html) */
+.textSelectionDisabled {
+   -moz-user-select: none;
+   -webkit-user-select: none;
+   -webkit-text-size-adjust: none;
+   -ms-user-select: none;
+   user-select: none;
+}
+
+html, body{
+   width: 100%;
+   height: 100%;
+   margin: 0 !important;
+   padding: 0 !important;
+
+}
+
+body{
+   background-color: #FBF8EB !important;
+   font-family: helvetica, serif !important;
+}
+
+#header{
+   display: block;
+   margin: 0;
+   padding: 0;
+   width: 100%;
+   height: 50px;
+   background-color: #333434;
+
+}
+
+#navbar{
+   width: 100%;
+   height: 100%;
+}
+
+#navbar a{
+   color: #9C9A9B;
+   vertical-align: middle;
+   margin-left: 5px;
+   font-weight: normal;
+   display: inline-block;
+   font-weight: bold;
+}
+
+#navbar a#logo{
+   color: #636064;
+   margin-left: 25px;
+   vertical-align: middle;
+   font-weight: bold;
+   font-size: 25px;
+   position: relative;
+   top: 25%;
+}
+
+#navbar ul{
+   display: inline-block;
+   height: 100%;
+}
+
+#navbar ul > li{
+   display: inline-block;
+   margin-right: 5px;
+}
+
+#navbar ul > li.active a{
+   color: #EFEFEB;
+}
+
+#mapArea {
+   border: 1px solid black;
+   width: auto;
+   height: 300px;
+   background-color: lightcyan;
+}
+
+
+/* orginal one from main.css */
+#dateAxisContainer {
+   border-top-width: 0;
+}
+
+#grapher_area {
+   display: none;
+}
+
+/* Disable the outline when clicking on plots/axes */
+:focus {
+   outline: none;
+}
+
+::-moz-focus-inner {
+   border: 0;
+}
+
+.plotContainer {
+   height: 200px;
+   border: 1px solid black;
+}
+
+.plot {
+   height: 200px;
+}
+
+#dateAxisContainer {
+   height: 70px;
+   border: 1px solid black;
+   border-bottom-width: 0;
+}
+
+#dateAxis {
+   width: auto;
+   height: 70px;
+   z-index: 2;
+}
+
+.axisCell {
+   width: 50px;
+   height: 200px;
+}
+
+.yAxisContainer {
+   width: 50px;
+   height: 200px;
+   border: 1px solid black;
+   border-left-width: 0;
+}
+
+.yAxis {
+   width: 50px;
+   height: 200px;
+}
+
+#valueLabel {
+   color: #666666;
+   width: auto;
+   min-width: 200px;
+   text-align: right;
+   padding: 0 5px 0 5px;
+   margin-top: -25px;
+   z-index: 1;
+}

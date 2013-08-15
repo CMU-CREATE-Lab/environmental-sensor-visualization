@@ -2,53 +2,24 @@
 <html>
 <head>
    <title>Fake Speck Visualization</title>
-   <style type="text/css">
-      html, body{
-         width: 100%;
-         height: 100%;
-      }
-
-      body{
-         width: 100%;
-         height: 100%;
-         margin: 0; 
-         padding: 0;
-         font-family: "Gill Sans Light", Verdana, Arial, sans-serif !important;
-         font-size: 10pt !important;
-      }
-
-      #mapArea {
-         width: 100%;
-         height: 40%;
-
-      }
-
-      #dateAxisContainer {
-         border-top-width: 0;
-      }
-
-      #grapher_area {
-         display: none;
-      }
-   </style>
-   <link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.6.4/leaflet.css" />
-   <!--[if lte IE 8]>
-       <link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.6/leaflet.ie.css" />
-   <![endif]-->
-   <link href='http://api.tiles.mapbox.com/mapbox.js/v1.3.1/mapbox.standalone.css' rel='stylesheet' />
-   <!--[if lte IE 8]>
-       <link href='http://api.tiles.mapbox.com/mapbox.js/v1.3.1/mapbox.ie.css' rel='stylesheet' >
-   <![endif]-->
-   <script src="http://code.jquery.com/jquery-1.10.1.min.js"></script>
-   <script src="http://code.jquery.com/jquery-migrate-1.2.1.min.js"></script>
+   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+   <meta charset="utf-8">
+   <link type="text/css" href="http://code.jquery.com/ui/1.10.2/themes/smoothness/jquery-ui.css" rel="stylesheet"/>
+   <link type="text/css" href="css/map-dropdown-menu.css" rel="stylesheet" />
+   <link rel="stylesheet" type="text/css" href="css/fake.css">
+   <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCGR21nG0gjPnQZtlCbPIxpDcJ2T2fOrf8&sensor=false"></script>
+   <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
    <script src="js/handlebars.js"></script>
    <script src="js/org/bodytrack/grapher/gwt/grapher2.nocache.js"></script>
    <script src="js/org/bodytrack/datastore/ChannelDatasource.js"></script>
    <script src="js/org/bodytrack/datastore/FakeDeviceManager.js"></script>
    <script src="js/org/bodytrack/grapher/Grapher.js"></script>
-   <script src="http://cdn.leafletjs.com/leaflet-0.6.4/leaflet.js"></script>
-   <script src='http://api.tiles.mapbox.com/mapbox.js/v1.3.1/mapbox.standalone.js'></script>
+   <script type="text/javascript" src="js/gdropdown.js" language="JavaScript"></script>
    <script language="JavaScript" type="text/javascript">
+
+      // Enable the visual refresh
+      google.maps.visualRefresh = true;
+
       var now = new Date();
       var today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime() / 1000;
       var tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0).getTime() / 1000;
@@ -62,6 +33,7 @@
 
       var map;
       var markers = {};
+      var markersCenters = {};
       var deviceInstallations = {};
       var currentlySelectedMarker = null;
       var currentlySelectedDeviceInstallationId = null;
@@ -69,68 +41,26 @@
       var activeMarkerIcon = "http://www.google.com/intl/en_us/mapfiles/ms/micons/blue-dot.png";
       var inactiveMarkerIcon = "http://www.google.com/intl/en_us/mapfiles/ms/micons/red-dot.png";
       var selectedMarkerIcon = "http://www.google.com/intl/en_us/mapfiles/ms/micons/green-dot.png";
-      
+      var activeMarkerColor = '#B1D7D7';
+      var activeMarkerColorCenter = '#63BDC9';
+      var inactiveMarkerColor = '#E7D1B7';
+      var inactiveMarkerColorCenter = '#E83015';
+      var selectedMarkerColor = '#86BD6F';
+      var selectedMarkerColorCenter = '#7BA23F';
+
       function initializeMap() {
-         map = L.mapbox.map('mapArea', 'hhua.map-2pmu73fr');
-         map.setView([40.44339, -79.94439], 15);
-
-         var geoJson = [{
-                 type: 'Feature',
-                 properties: {
-                     title: 'Washington, D.C.',
-                 },
-                 geometry: {
-                     type: 'Point',
-                     coordinates: [-79.94439, 40.44339]
-                 }
-             }];
-
-         var geojsonMarkerOptions = {
-             radius: 30,
-             fillColor: "#ff7800",
-             color: "#000",
-             weight: 1,
-             opacity: 1,
-             fillOpacity: 0.2,
-             stroke: 0
+         var mapOptions = {
+            center : new google.maps.LatLng(40.44339, -79.94439),
+            zoom : 15,
+            mapTypeId : google.maps.MapTypeId.ROADMAP
          };
-
-         var geoJsonLayer = L.geoJson(geoJson, {
-             pointToLayer: function (feature, latlng) {
-                 return L.circleMarker(latlng, geojsonMarkerOptions);
-               }
-         }).addTo(map);
-
-         var geojsonMarkerOptionsCenter = {
-             radius: 6,
-             fillColor: "#ff7800",
-             color: "#000",
-             weight: 1,
-             opacity: 1,
-             fillOpacity: 0.9,
-             stroke: 0
-         };
-
-         var geoJsonLayerCenter = L.geoJson(geoJson, {
-             pointToLayer: function (feature, latlng) {
-                 return L.circleMarker(latlng, geojsonMarkerOptionsCenter);
-               }
-         }).addTo(map);
-
-         // add control groups
-         var layerGroups = {
-            "Center": geoJsonLayerCenter,
-            "Outer": geoJsonLayer
-         }
-         L.control.layers(layerGroups).addTo(map);
-
-         // Add event listener to handle map moving
-         map.on('move', function(){
+         map = new google.maps.Map(document.getElementById("mapArea"), mapOptions);
+         google.maps.event.addListener(map, 'bounds_changed', function() {
             deviceManager.setLatLongBounds(map.getBounds());
          });
 
          // Add an idle event listener ONCE to handle map loading.
-         map.once('load', function(){
+         google.maps.event.addListenerOnce(map, 'idle', function() {
             console.log("Map is done loading");
 
             // The map is done loading, so we need to get the device installation activity status
@@ -142,25 +72,60 @@
 
       // Add a marker to the map and push to the array.
       function addMarker(id, location, isActive) {
-         var marker = L.marker(location).addTo(map);
-         marker.on('click', function() {
-            // de-select the previously-selected marker, if any
-            if (currentlySelectedMarker != null) {
-               setMarkerActive(currentlySelectedDeviceInstallationId, isDeviceInstallationActive[currentlySelectedDeviceInstallationId]);
-            }
-            // make this marker the current one, then set the icon
-            currentlySelectedMarker = marker;
-            currentlySelectedDeviceInstallationId = id;
-            currentlySelectedMarker.setIcon(L.icon({iconUrl: activeMarkerIcon}));
 
-            loadChannel(currentlySelectedDeviceInstallationId);
+         var circleMarkerCenter = new google.maps.Circle({
+            strokeColor: '#FF0000',
+            strokeOpacity: 0,
+            strokeWeight: 1,
+            fillColor: inactiveMarkerColorCenter,
+            fillOpacity: 1,
+            map: map,
+            center: location,
+            radius: 10
          });
-         markers[id] = marker;
+
+         var circleMarker = new google.maps.Circle({
+            strokeColor: '#FF0000',
+            strokeOpacity: 0,
+            strokeWeight: 1,
+            fillColor: inactiveMarkerColor,
+            fillOpacity: 0.5,
+            map: map,
+            center: location,
+            radius: 70
+         });
+
+         google.maps.event.addListener(circleMarker, 'click', function() {
+            popOver(circleMarker, id);
+         });
+
+         google.maps.event.addListener(circleMarkerCenter, 'click', function() {
+            popOver(circleMarker, id);
+         });
+
+         markers[id] = circleMarker;
+         markersCenters[id] = circleMarkerCenter;
+
          setMarkerActive(id, isActive);
       }
 
+      function popOver(marker, id){
+         // de-select the previously-selected marker, if any
+         if (currentlySelectedMarker != null) {
+            setMarkerActive(currentlySelectedDeviceInstallationId, isDeviceInstallationActive[currentlySelectedDeviceInstallationId]);
+         }
+         // make this marker the current one, then set the icon
+         currentlySelectedMarker = marker;
+         currentlySelectedDeviceInstallationId = id;
+         markers[id].setOptions({ fillColor : selectedMarkerColor });
+         markersCenters[id].setOptions({fillColor: selectedMarkerColorCenter});
+
+         loadChannel(currentlySelectedDeviceInstallationId);
+      }
+
       function setMarkerActive(id, isActive) {
-         markers[id].setIcon(L.icon({iconUrl: isActive ? activeMarkerIcon : inactiveMarkerIcon}));
+         markers[id].setOptions({ fillColor : isActive ? activeMarkerColor : inactiveMarkerColor });
+         markersCenters[id].setOptions({fillColor : isActive ? activeMarkerColorCenter : inactiveMarkerColorCenter});
       }
 
       function renderChannelValuesOnMap(channelValues) {
@@ -183,9 +148,9 @@
       };
 
       window.grapherLoad = function() {
-         $("#channel_selector").change(function() {
-            deviceManager.setCurrentChannelName(this.value);
-         });
+         // $("#channel_selector").change(function() {
+         //    deviceManager.setCurrentChannelName(this.value);
+         // });
 
          // create and configure the FakeDeviceManager
          deviceManager = new org.bodytrack.datastore.FakeDeviceManager();
@@ -250,7 +215,8 @@
          dateAxis.setCursorPosition(new Date().getTime()/1000);
 
          // now that all the initial config is done, set the current channel
-         deviceManager.setCurrentChannelName($("#channel_selector").val());         // initialize the channel
+         //deviceManager.setCurrentChannelName($("#channel_selector").val());         // initialize the channel
+         deviceManager.setCurrentChannelName('particles');         // initialize the channel
 
          // show the grapher area
          $("#grapher_area").show();
@@ -260,7 +226,46 @@
 
          // set up window resize handler
          $(window).resize(setSizes);
+
+         addSelectionControl();
       };
+
+      function addSelectionControl(){
+           var items = [];
+
+           $.each([{name: 'particles', value: 'particles'}, {name: 'temperature', value: 'temperature'}], function(index, channel){
+             var divOptions = {
+               gmap: map,
+               name: channel.name,
+               title: "This acts like a button or click event",
+               action: function(){
+                 //setMapToProgramLocation(programLocation);
+                 deviceManager.setCurrentChannelName(channel.value);
+               }
+             }
+             var optionDiv1 = new optionDiv(divOptions);
+             items.push(optionDiv1);
+           });
+
+           //put them all together to create the drop down       
+           var ddDivOptions = {
+             items: items,
+             id: "myddOptsDiv"           
+           }
+           //alert(ddDivOptions.items[1]);
+           var dropDownDiv = new dropDownOptionsDiv(ddDivOptions);               
+                   
+           var dropDownOptions = {
+               gmap: map,
+               name: 'Channel',
+               id: 'ddControl',
+               title: 'A custom drop down select with mixed elements',
+               position: google.maps.ControlPosition.TOP_RIGHT,
+               dropDown: dropDownDiv 
+           }
+           
+           var dropDown1 = new dropDownControl(dropDownOptions);     
+      }
 
       function loadChannel(deviceInstallationId) {
          var deviceInstallation = deviceInstallations[deviceInstallationId];
@@ -302,11 +307,6 @@
             grapher.getYAxis().setSize(yAxisElement.width(), yAxisElement.height(), SequenceNumber.getNext())
          }
       }
-
-      $(function(){
-         initializeMap();
-      });
-
    </script>
 
    <script id="grapher_template" type="text/x-handlebars-template">
@@ -328,13 +328,12 @@
    </script>
 </head>
 <body>
-<h1>Fake Speck Visualization</h1>
-<select id="channel_selector">
-   <option value="particles">particles</option>
-   <option value="temperature">temperature</option>
-</select>
-
-<div id="mapArea"></div>
+   <div id="header">
+      <div id="navbar">
+         <a href="#" id="logo">Fake Speck Visualization</a>
+      </div>
+   </div>
+   <div id="mapArea">Map goes here</div>
 <div id="grapher_area" class="textSelectionDisabled">
    <table id="grapher" border="0" cellpadding="0" cellspacing="0">
       <tr>
@@ -357,6 +356,5 @@
    </table>
 </div>
 <div id="channelInfo"></div>
-   
 </body>
 </html>
