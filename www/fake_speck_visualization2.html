@@ -15,6 +15,7 @@
    <script src="js/org/bodytrack/datastore/FakeDeviceManager.js"></script>
    <script src="js/org/bodytrack/grapher/Grapher.js"></script>
    <script type="text/javascript" src="js/gdropdown.js" language="JavaScript"></script>
+   <script src="js/chroma.min.js" type="text/javascript"></script>
    <script language="JavaScript" type="text/javascript">
 
       // Enable the visual refresh
@@ -23,6 +24,8 @@
       var now = new Date();
       var today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime() / 1000;
       var tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0).getTime() / 1000;
+
+      var scale = chroma.scale(['linen', 'black']);
 
       var grapherTemplate = null;
       var channelInfoTemplate = null;
@@ -142,14 +145,13 @@
             value = 90;
          else if(value < 0)
             value = 0;
+         
+         var color = '' + scale((30 + value) / 120).hex();
+         console.log(color);
 
-         var r = Math.floor(255 * (50 + value) / 140),
-             g = Math.floor(255 * (50 + value) / 140),
-             b = 200;
-
-         markers[id].setOptions({ fillColor : isActive ? "rgb(" + r + "," + g + "," + b + ")" : inactiveMarkerColor });
-         markersCenters[id].setOptions({fillColor : isActive ? "rgb(" + r + "," + g + "," + b + ")" : inactiveMarkerColorCenter});
-         markerColor[id] = "rgb(" + r + "," + g + "," + b + ")";
+         markers[id].setOptions({ fillColor : isActive ? color : inactiveMarkerColor });
+         markersCenters[id].setOptions({fillColor : isActive ? color : inactiveMarkerColorCenter});
+         markerColor[id] = color;
 
          if(id == currentlySelectedDeviceInstallationId){
             // update stroke color
