@@ -34,6 +34,7 @@
       var map;
       var markers = {};
       var markersCenters = {};
+      var markerColor = {};
       var deviceInstallations = {};
       var currentlySelectedMarker = null;
       var currentlySelectedDeviceInstallationId = null;
@@ -71,9 +72,9 @@
       function addMarker(id, location, isActive) {
 
          var circleMarkerCenter = new google.maps.Circle({
-            strokeColor: '#FF0000',
+            strokeColor: '#7BA23F',
             strokeOpacity: 0,
-            strokeWeight: 1,
+            strokeWeight: 4,
             fillColor: inactiveMarkerColorCenter,
             fillOpacity: 1,
             map: map,
@@ -82,9 +83,9 @@
          });
 
          var circleMarker = new google.maps.Circle({
-            strokeColor: '#FF0000',
+            strokeColor: '#7BA23F',
             strokeOpacity: 0,
-            strokeWeight: 1,
+            strokeWeight: 4,
             fillColor: inactiveMarkerColor,
             fillOpacity: 0.5,
             map: map,
@@ -108,21 +109,22 @@
 
       function popOver(marker, id){
          // de-select the previously-selected marker, if any
-         if (currentlySelectedMarker != null) {
+         if (currentlySelectedDeviceInstallationId != null) {
             setMarkerActive(currentlySelectedDeviceInstallationId, isDeviceInstallationActive[currentlySelectedDeviceInstallationId]);
          }
          // make this marker the current one, then set the icon
          currentlySelectedMarker = marker;
          currentlySelectedDeviceInstallationId = id;
-         markers[id].setOptions({ fillColor : selectedMarkerColor });
-         markersCenters[id].setOptions({fillColor: selectedMarkerColorCenter});
+         markers[id].setOptions({strokeOpacity : 0.7});
+         
 
          loadChannel(currentlySelectedDeviceInstallationId);
       }
 
       function setMarkerActive(id, isActive) {
-         markers[id].setOptions({ fillColor : isActive ? activeMarkerColor : inactiveMarkerColor });
-         markersCenters[id].setOptions({fillColor : isActive ? activeMarkerColorCenter : inactiveMarkerColorCenter});
+
+         markers[id].setOptions({ fillColor : isActive ? ((id in markerColor) ? markerColor[id] : activeMarkerColor) : inactiveMarkerColor, strokeOpacity : 0});
+         markersCenters[id].setOptions({fillColor : isActive ? ((id in markerColor) ? markerColor[id] : activeMarkerColorCenter) : inactiveMarkerColorCenter});
       }
 
       function renderChannelValuesOnMap(channelValues) {
@@ -141,12 +143,18 @@
          else if(value < 0)
             value = 0;
 
-         var r = Math.floor((255 * value) / 90),
-             g = Math.floor((255 * value) / 90),
+         var r = Math.floor(255 * (50 + value) / 140),
+             g = Math.floor(255 * (50 + value) / 140),
              b = 200;
 
          markers[id].setOptions({ fillColor : isActive ? "rgb(" + r + "," + g + "," + b + ")" : inactiveMarkerColor });
          markersCenters[id].setOptions({fillColor : isActive ? "rgb(" + r + "," + g + "," + b + ")" : inactiveMarkerColorCenter});
+         markerColor[id] = "rgb(" + r + "," + g + "," + b + ")";
+
+         if(id == currentlySelectedDeviceInstallationId){
+            // update stroke color
+            markers[id].setOptions({strokeOpacity : 0.7});
+         }
       }
 
       var updateMarkerActivityState = function(isDeviceInstallationActiveMap) {
@@ -154,9 +162,19 @@
          $.each(isDeviceInstallationActiveMap, function(installationId, isActive) {
             // This if statement merely preserves the green pin for the selected marker.  Once we have circles
             // whose color represents the channel value at the cursor time, then we won't need the if statement.
-            if (installationId != currentlySelectedDeviceInstallationId) {
+            // if (installationId != currentlySelectedDeviceInstallationId) {
+            //    setMarkerActive(installationId, isActive);
+            // }
+
+            if(installationId != currentlySelectedDeviceInstallationId)
                setMarkerActive(installationId, isActive);
+            else{
+               markers[installationId].setOptions({ fillColor : isActive ? activeMarkerColor : inactiveMarkerColor});
+               markersCenters[installationId].setOptions({fillColor : isActive ? activeMarkerColorCenter : inactiveMarkerColorCenter});
             }
+
+
+
          });
          isDeviceInstallationActive = isDeviceInstallationActiveMap;
       };
@@ -187,6 +205,8 @@
                markers[installationId].setMap(null);
                delete markers[installationId];
                delete deviceInstallations[installationId];
+               delete markerColor[installationId];
+               delete markersCenters[installationId];
             });
          });
          deviceManager.addActiveDeviceInstallationChangeListener(function(event) {
