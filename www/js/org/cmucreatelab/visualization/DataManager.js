@@ -243,7 +243,7 @@ else {
 
 
       var createDataChangeEvent = function() {
-         // TODO: improve this by only including sites whose clamed time has actually changed
+         // TODO: improve this by only including sites whose clamped time has actually changed
          var values = {};
          for (var name in sitesByName) {
             var site = sitesByName[name];
