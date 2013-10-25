@@ -4,7 +4,7 @@
 // Dependencies:
 // * jQuery (http://jquery.com/)
 // * The GWT grapher (gwt/grapher2.nocache.js)
-// * org.bodytrack.grapher.ChannelDatasource
+// * org.bodytrack.grapher.ChannelDatasource (or something that provides the same API)
 //
 // Author: Chris Bartley (bartley@cmu.edu)
 //======================================================================================================================
@@ -57,11 +57,6 @@ if (!window['$']) {
    var nojQueryMsg = "The jQuery library is required by org.bodytrack.grapher.Grapher.js";
    alert(nojQueryMsg);
    throw new Error(nojQueryMsg);
-}
-if (!org.bodytrack.datastore.ChannelDatasource) {
-   var noChannelDatasourceMsg = "The org.bodytrack.datastore.ChannelDatasource library is required by org.bodytrack.grapher.Grapher.js";
-   alert(noChannelDatasourceMsg);
-   throw new Error(noChannelDatasourceMsg);
 }
 //======================================================================================================================
 

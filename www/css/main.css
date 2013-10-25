@@ -22,18 +22,25 @@ body {
    border: 0;
 }
 
-.plotContainer {
-   height: 200px;
-   border: 1px solid black;
+#main_panel {
+   display: none;
 }
 
-.plot {
-   height: 200px;
+#mapArea {
+   border: 1px solid black;
+   width: auto;
+   height: 400px;
+   background-color: lightcyan;
+}
+
+#grapher_area {
+   display: none;
 }
 
 #dateAxisContainer {
    height: 70px;
    border: 1px solid black;
+   border-top-width: 0;
    border-bottom-width: 0;
 }
 
@@ -60,12 +67,38 @@ body {
    height: 200px;
 }
 
+.plotContainer {
+   height: 200px;
+   border: 1px solid black;
+}
+
+.plot {
+   height: 200px;
+}
+
 #valueLabel {
+   width: auto;
+   text-align: right;
+   margin-top: -25px;
+   z-index: 1;
+   padding: 0 5px 0 5px;
+}
+
+#valueLabelText {
+   display: inline-block;
    color: #666666;
    width: auto;
    min-width: 200px;
    text-align: right;
-   padding: 0 5px 0 5px;
-   margin-top: -25px;
-   z-index: 1;
+}
+
+#valueLabelColor {
+   display: inline-block;
+   width: 10px;
+   height: 10px;
+   min-width: 10px;
+   min-height: 10px;
+   max-width: 10px;
+   max-height: 10px;
+   line-height: 10px;
 }

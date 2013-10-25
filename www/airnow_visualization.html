@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html>
+<head>
+   <title>AirNow Visualization</title>
+   <link href="css/main.css" rel="stylesheet">
+   <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCGR21nG0gjPnQZtlCbPIxpDcJ2T2fOrf8&sensor=false"></script>
+   <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+   <script src="js/handlebars.js"></script>
+   <script src="js/org/bodytrack/grapher/gwt/grapher2.nocache.js"></script>
+   <script src="js/org/bodytrack/grapher/Grapher.js"></script>
+   <script src="js/org/cmucreatelab/visualization/DataManager.js"></script>
+   <script src="js/org/cmucreatelab/array/util.js"></script>
+   <script src="js/org/cmucreatelab/http/util.js"></script>
+   <script language="JavaScript" type="text/javascript">
+
+      var METADATA_URL = "binary/metadata.json";
+      var DATA_URL = "binary/data.bin";
+
+      // Got concentration descriptions and ranges from slides 5 and 11 in http://www.epa.gov/international/public-participation-guide/workshopPDFs/zell-aqi.pdf
+      // and RGB color codes from http://www.airnowapi.org/aq101
+      var PARTICLE_CONCENTRATION_INDEX = [
+         {
+            max : 15.4,
+            name : "Good",
+            description : "None",
+            color : "#00e400"
+         },
+         {
+            max : 40.4,
+            name : "Moderate",
+            description : "Unusually sensitive people should reduce prolonged or heavy exertion",
+            color : "#ffff00"
+         },
+         {
+            max : 65.4,
+            name : "Unhealthy for Sensitive Groups",
+            description : "Sensitive groups should reduce prolonged or heavy exertion",
+            color : "#ff7e00"
+         },
+         {
+            max : 150.4,
+            name : "Unhealthy",
+            description : "Sensitive groups should avoid prolonged or heavy exertion; general public should reduce prolonged or heavy exertion",
+            color : "#ff0000"
+         },
+         {
+            max : 250.4,
+            name : "Very Unhealthy",
+            description : "Sensitive groups should avoid all physical activity outdoors; general public should avoid prolonged or heavy exertion",
+            color : "#99004c"
+         },
+         {
+            max : 500.4,
+            name : "Hazardous",
+            description : "Everyone should avoid all physical activity outdoors",
+            color : "#7e0023"
+         }
+      ];
+
+      var now = new Date();
+      var today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime() / 1000;
+      var tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0).getTime() / 1000;
+
+      var dataManager = null;
+
+      var grapherTemplate = null;
+      var channelInfoTemplate = null;
+      var dateAxis;
+      var grapher;
+      var plotContainer;
+
+      var map;
+      var markers = {};
+      var currentlySelectedMarker = null;
+      var currentlySelectedMarkerId = null;
+
+      window.grapherLoad = loadData;
+
+      function loadData() {
+         $.ajax({
+                   url : METADATA_URL,
+                   type : 'GET',
+                   dataType : 'json',
+                   timeout : 5000,
+                   cache : false,
+                   global : false,
+                   success : function(sitesJson) {
+                      if (sitesJson && sitesJson['sites']) {
+                         loadBinaryData(sitesJson['sites']);
+                      }
+                      else {
+                         console.log("Failed to load metadata.json");
+                      }
+                   },
+                   error : function() {
+                      console.log("Failed to load metadata.json");
+                   }
+                });
+
+      }
+
+      function loadBinaryData(metadata) {
+         loadArrayBuffer("binary/data.bin",
+                         {
+                            success : function(arrayBuffer) {
+                               console.log("loadArrayBuffer SUCCESS!");
+                               dataManager = new org.cmucreatelab.visualization.DataManager(metadata, arrayBuffer);
+
+                               // now that all the data is loaded, go ahead and initialize the page
+                               initialize();
+                            },
+                            failure : function(requestStatus) {
+                               // TODO: do something better
+                               alert("Failed to load the data (Request Status: " + requestStatus + ")");
+                            }
+                         });
+      }
+
+      function initialize() {
+         $("#loading_panel").hide();
+         $("#main_panel").show();
+
+         initializeMap();
+
+         console.log("AFter init map");
+
+         // compile the templates for later use
+         grapherTemplate = Handlebars.compile($("#grapher_template").html());
+         channelInfoTemplate = Handlebars.compile($("#channel_info_template").html());
+
+         // configure the DataManager
+         dataManager.addDataChangeListener(function(valuesMap) {
+            $.each(valuesMap, function(name, value) {
+               var marker = markers[name];
+               var icon = marker.getIcon();
+               var isNoData = (value === null)
+               icon['fillColor'] = isNoData ? "#666666" : getColorForValue(value);
+               icon['fillOpacity'] = isNoData ? 0.5 : 0.6;
+               icon['scale'] = isNoData ? 4 : 8;
+               marker.setOptions({ icon : icon });
+            });
+         });
+
+         // initialize the DateAxis
+         var globalTimeRange = dataManager.getGlobalTimeRange();
+         dateAxis = new DateAxis("dateAxis", "horizontal", {"min" : globalTimeRange['min'], "max" : globalTimeRange['max']});
+         dateAxis.addAxisChangeListener(function(cursorChangeEvent) {
+            dataManager.setTimeRange({
+                                        "min" : cursorChangeEvent['min'],
+                                        "max" : cursorChangeEvent['max'],
+                                        "cursorPosition" : cursorChangeEvent['cursorPosition']
+                                     });
+         });
+
+         dataManager.setLatLongBounds(map.getBounds());
+
+         console.log("before grapher area show");
+
+         // show the grapher area
+         $("#grapher_area").show();
+
+         // set initial sizes
+         setSizes();
+
+         // set up window resize handler
+         $(window).resize(setSizes);
+      }
+
+      function initializeMap() {
+         console.log("In init map");
+         var mapOptions = {
+            center : new google.maps.LatLng(39.043246371518045, -94.07431000579834),
+            zoom : 4,
+            mapTypeId : google.maps.MapTypeId.TERRAIN
+         };
+         map = new google.maps.Map(document.getElementById("mapArea"), mapOptions);
+         google.maps.event.addListener(map, 'bounds_changed', function() {
+            console.log("Map bounds changed");
+         });
+
+         // Add an idle event listener ONCE to handle map loading.
+         google.maps.event.addListenerOnce(map, 'idle', function() {
+            console.log("Map is done loading");
+            initializeMarkers();
+         });
+      }
+
+      function initializeMarkers() {
+         dataManager.forEachSite(function(site) {
+            var latLong = new google.maps.LatLng(site['latitude'], site['longitude'])
+            addMarker(site['name'], latLong, true)
+         });
+
+         // set initial cursor to the midpoint of the available data--this will trigger the data change event,
+         // which will color the markers appropriately.
+         var globalTimeRange = dataManager.getGlobalTimeRange();
+         dateAxis.setCursorPosition((globalTimeRange['min'] + globalTimeRange['max']) / 2);
+      }
+      // Add a marker to the map and push to the array.
+      function addMarker(id, location, isActive) {
+         var marker = new google.maps.Marker({
+                                                position : location,
+                                                map : map,
+                                                icon : {
+                                                   path : google.maps.SymbolPath.CIRCLE,
+                                                   fillColor : '#00ff00',
+                                                   fillOpacity : 0,
+                                                   strokeColor : '#0000ff',
+                                                   strokeOpacity : 0,
+                                                   strokeWeight : 0,
+                                                   scale : 4 //pixels
+                                                }
+                                             });
+         google.maps.event.addListener(marker,
+                                       'click',
+                                       function() {
+                                          // de-select the previously-selected marker, if any
+                                          if (currentlySelectedMarker != null) {
+                                             setMarkerActive(currentlySelectedMarker, false);
+                                          }
+                                          // make this marker the current one, then set the icon
+                                          currentlySelectedMarker = marker;
+                                          currentlySelectedMarkerId = id;
+                                          setMarkerActive(currentlySelectedMarker, true);
+
+                                          loadChannel(currentlySelectedMarkerId);
+                                       });
+
+         markers[id] = marker;
+      }
+
+      function setMarkerActive(marker, isActive) {
+         var icon = marker.getIcon();
+         icon['strokeOpacity'] = isActive ? 1 : 0;
+         icon['strokeWeight'] = isActive ? 2 : 0;
+         marker.setOptions({ icon : icon });
+      }
+
+      function getColorForValue(value) {
+         return getParticleConcentrationIndex(value)['color'];
+      }
+
+      function getParticleConcentrationIndex(value) {
+         if (value <= PARTICLE_CONCENTRATION_INDEX[0]['max']) {
+            return PARTICLE_CONCENTRATION_INDEX[0];
+         }
+         else if (value > PARTICLE_CONCENTRATION_INDEX[PARTICLE_CONCENTRATION_INDEX.length - 2]['max']) {
+            return PARTICLE_CONCENTRATION_INDEX[PARTICLE_CONCENTRATION_INDEX.length - 1];
+         }
+         else {
+            for (var i = 1; i < PARTICLE_CONCENTRATION_INDEX.length - 1; i++) {
+               if (value <= PARTICLE_CONCENTRATION_INDEX[i]['max']) {
+                  return PARTICLE_CONCENTRATION_INDEX[i];
+               }
+            }
+         }
+         return PARTICLE_CONCENTRATION_INDEX[PARTICLE_CONCENTRATION_INDEX.length - 1];
+      }
+
+      function loadChannel(id) {
+         var site = dataManager.findByName(id);
+         $("#channelInfo").empty().html(channelInfoTemplate({"name" : site['name']})).show();
+         $("#grapherContainer").empty().html(grapherTemplate()).show();
+
+         var channelDatasource = dataManager.getChannelDatasource(id);
+         var channel = {
+            "min" : site['minValue'],
+            "max" : site['maxValue'],
+            "style" : {
+               "styles" : [
+                  {"type" : "line", "lineWidth" : 1, "show" : true},
+                  {
+                     "type" : "lollipop",
+                     "lineWidth" : 1,
+                     "radius" : 0,
+                     "fill" : false,
+                     "show" : true,
+                     "color" : "#cccccc"
+                  }
+               ],
+               highlight : {
+                  "lineWidth" : 1,
+                  "styles" : [
+                     {
+                        "type" : "lollipop",
+                        "color" : "#ff0000",
+                        "radius" : 1,
+                        "lineWidth" : 1,
+                        "fill" : false
+                     },
+                     {
+                        "show" : true,
+                        "type" : "value",
+                        "fillColor" : "#ff0000",
+                        "marginWidth" : 10,
+                        "font" : "7pt Helvetica,Arial,Verdana,sans-serif",
+                        "verticalOffset" : 7,
+                        "numberFormat" : "###,##0.0##"
+                     }
+                  ]
+               }
+            }
+         };
+         grapher = new org.bodytrack.grapher.Grapher(channel, channelDatasource, dateAxis, "yAxis1");
+         grapher.addDataPointListener(function(val) {
+            if (val) {
+               $("#valueLabelText").html(val['dateString'] + " " + val['valueString']);
+               $("#valueLabelColor").css('background-color', getParticleConcentrationIndex(val['valueString'])['color']);
+            }
+            else {
+               $("#valueLabelText").html("");
+               $("#valueLabelColor").css('background-color', "#ffffff");
+            }
+         });
+         plotContainer = new PlotContainer("pc1", false, [grapher.getPlot()]);
+
+         // set initial sizes
+         setSizes();
+      }
+
+      function setSizes() {
+         var plotContainerWidth = $(window).width() - 20 - $("#column2").width() - $("#column3").width() - 2;
+         var plotContainerHeight = $("#column1").height() - 2;
+
+         // resize date axis
+         dateAxis.setSize(plotContainerWidth, $("#dateAxis").height(), SequenceNumber.getNext());
+
+         if (plotContainer != null) {
+            plotContainer.setSize(plotContainerWidth, plotContainerHeight, SequenceNumber.getNext());
+         }
+
+         if (grapher != null) {
+            var yAxisElement = $("#yAxis1");
+            grapher.getYAxis().setSize(yAxisElement.width(), yAxisElement.height(), SequenceNumber.getNext())
+         }
+      }
+   </script>
+
+   <script id="grapher_template" type="text/x-handlebars-template">
+      <td width="400" id="column1">
+         <div id="plotContainer1" class="plotContainer">
+            <div id="pc1" class="plot"></div>
+         </div>
+      </td>
+      <td id="column2" class="axisCell">
+         <div id="yAxisContainer1" class="yAxisContainer">
+            <div id="yAxis1" class="yAxis"></div>
+         </div>
+      </td>
+   </script>
+
+   <script id="channel_info_template" type="text/x-handlebars-template">
+      <h2>{{name}}</h2>
+   </script>
+</head>
+<body>
+<div id="loading_panel">Loading...</div>
+<div id="main_panel">
+   <div id="grapher_area" class="textSelectionDisabled">
+      <table id="grapher" border="0" cellpadding="0" cellspacing="0">
+         <tr>
+            <td width="400">
+               <div id="mapArea">Map goes here</div>
+            </td>
+            <td>&nbsp;</td>
+         </tr>
+         <tr>
+            <td width="400">
+               <div id="dateAxisContainer">
+                  <div id="dateAxis"></div>
+                  <div id="valueLabel">
+                     <div id="valueLabelText"></div>
+                     <div id="valueLabelColor"></div>
+                  </div>
+               </div>
+            </td>
+            <td>&nbsp;</td>
+         </tr>
+         <tr id="grapherContainer">
+         </tr>
+      </table>
+   </div>
+   <div id="channelInfo"></div>
+</div>
+</body>
+</html>
