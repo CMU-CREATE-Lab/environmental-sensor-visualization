@@ -217,6 +217,15 @@
                                           // de-select the previously-selected marker, if any
                                           if (currentlySelectedMarker != null) {
                                              setMarkerActive(currentlySelectedMarker, false);
+
+                                             // if the previously-selected marker is this one, then unselect it
+                                             // and remove the channel for it from the grapher.
+                                             if (id == currentlySelectedMarkerId) {
+                                                removeChannel(currentlySelectedMarkerId);
+                                                currentlySelectedMarker = null;
+                                                currentlySelectedMarkerId = null;
+                                                return;
+                                             }
                                           }
                                           // make this marker the current one, then set the icon
                                           currentlySelectedMarker = marker;
@@ -257,10 +266,16 @@
          return PARTICLE_CONCENTRATION_INDEX[PARTICLE_CONCENTRATION_INDEX.length - 1];
       }
 
+      function removeChannel(id) {
+         $("#channelInfo").empty();
+         $("#grapherContainer").empty()
+      }
+
       function loadChannel(id) {
          var site = dataManager.findByName(id);
-         $("#channelInfo").empty().html(channelInfoTemplate({"name" : site['name']})).show();
-         $("#grapherContainer").empty().html(grapherTemplate()).show();
+         removeChannel(id);
+         $("#channelInfo").html(channelInfoTemplate({"name" : site['name']})).show();
+         $("#grapherContainer").html(grapherTemplate()).show();
 
          var channelDatasource = dataManager.getChannelDatasource(id);
          var channel = {
