@@ -78,8 +78,8 @@ body {
 
 #valueLabel {
    width: auto;
+   height: 20px;
    text-align: right;
-   margin-top: -25px;
    z-index: 1;
    padding: 0 5px 0 5px;
 }
@@ -94,6 +94,7 @@ body {
 
 #valueLabelColor {
    display: inline-block;
+   border: 1px solid black;
    width: 10px;
    height: 10px;
    min-width: 10px;

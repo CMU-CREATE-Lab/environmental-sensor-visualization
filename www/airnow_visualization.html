@@ -304,12 +304,12 @@
          grapher = new org.bodytrack.grapher.Grapher(channel, channelDatasource, dateAxis, "yAxis1");
          grapher.addDataPointListener(function(val) {
             if (val) {
-               $("#valueLabelText").html(val['dateString'] + " " + val['valueString']);
-               $("#valueLabelColor").css('background-color', getParticleConcentrationIndex(val['valueString'])['color']);
+               $("#valueLabelText").show().html(val['dateString'] + " " + val['valueString']);
+               $("#valueLabelColor").show().css('background-color', getParticleConcentrationIndex(val['valueString'])['color']);
             }
             else {
-               $("#valueLabelText").html("");
-               $("#valueLabelColor").css('background-color', "#ffffff");
+               $("#valueLabelText").hide();
+               $("#valueLabelColor").hide();
             }
          });
          plotContainer = new PlotContainer("pc1", false, [grapher.getPlot()]);
@@ -368,15 +368,19 @@
             <td width="400">
                <div id="dateAxisContainer">
                   <div id="dateAxis"></div>
-                  <div id="valueLabel">
-                     <div id="valueLabelText"></div>
-                     <div id="valueLabelColor"></div>
-                  </div>
                </div>
             </td>
             <td>&nbsp;</td>
          </tr>
          <tr id="grapherContainer">
+         </tr>
+         <tr>
+            <td align="right">
+               <div id="valueLabel">
+                  <div id="valueLabelText"></div>
+                  <div id="valueLabelColor"></div>
+               </div>
+            </td>
          </tr>
       </table>
    </div>
