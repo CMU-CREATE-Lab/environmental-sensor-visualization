@@ -84,9 +84,9 @@
                    timeout : 5000,
                    cache : false,
                    global : false,
-                   success : function(sitesJson) {
-                      if (sitesJson && sitesJson['sites']) {
-                         loadBinaryData(sitesJson['sites']);
+                   success : function(sitesMetadata) {
+                      if (sitesMetadata && sitesMetadata['sites']) {
+                         loadBinaryData(sitesMetadata);
                       }
                       else {
                          console.log("Failed to load metadata.json");
@@ -99,12 +99,12 @@
 
       }
 
-      function loadBinaryData(metadata) {
+      function loadBinaryData(sitesMetadata) {
          loadArrayBuffer("binary/data.bin",
                          {
                             success : function(arrayBuffer) {
                                console.log("loadArrayBuffer SUCCESS!");
-                               dataManager = new org.cmucreatelab.visualization.DataManager(metadata, arrayBuffer);
+                               dataManager = new org.cmucreatelab.visualization.DataManager(sitesMetadata, arrayBuffer);
 
                                // now that all the data is loaded, go ahead and initialize the page
                                initialize();
@@ -377,10 +377,15 @@
          <tr>
             <td align="right">
                <div id="valueLabel">
-                  <div id="valueLabelText"></div>
-                  <div id="valueLabelColor"></div>
+                  <table border="0" cellpadding="0" cellspacing="0" align="right">
+                     <tr>
+                        <td><div id="valueLabelText"></div></td>
+                        <td><div id="valueLabelColor"></div></td>
+                     </tr>
+                  </table>
                </div>
             </td>
+            <td>&nbsp;</td>
          </tr>
       </table>
    </div>

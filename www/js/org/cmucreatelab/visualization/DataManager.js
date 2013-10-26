@@ -116,33 +116,46 @@ else {
          console.log("record size (bytes):   " + recordSize);
          console.log("num data samples:      " + (dataView.byteLength / recordSize));
 
-         for (var i = 0; i < metadata.length; i++) {
-            var site = metadata[i];
+         //--------------------------------------
+
+         // First compute the global min and max times and populate the sitesByName map.
+         var numSites = 0;
+         for (var i = 0; i < metadata['sites'].length; i++) {
+            var site = metadata['sites'][i];
             if (site['numRecords'] > 0) {
-               //console.log("Site:" + site['name']);
-               site['times'] = new Int32Array(site['numRecords']);
-               site['values'] = new Float32Array(site['numRecords']);
                globalMinTime = Math.min(globalMinTime, site['minTime']);
                globalMaxTime = Math.max(globalMaxTime, site['maxTime']);
-               var idx = 0;
-               var startingByte = site['recordOffset'] * recordSize;
-               var endingByte = startingByte + (site['numRecords'] * recordSize);
-               //console.log("Bytes [" + startingByte + "] - [" + endingByte + "]");
-               for (var j = startingByte; j < endingByte; j += recordSize) {
-                  site['times'][idx] = dataView.getInt32(j);
-
-                  // Get the value, but divide it by 10 because the server has multiplied all
-                  // values by 10 and saved as shorts in order to save space in the binary file.
-                  // So, we need to convert back to the actual value here.
-                  site['values'][idx] = dataView.getInt16(j + Int32Array.BYTES_PER_ELEMENT) / 10.0;
-                  idx++;
-               }
                sitesByName[site['name']] = site;
+               numSites++;
+            }
+         }
+         console.log("numSites:        " + numSites);
+         console.log("global min time: " + globalMinTime);
+         console.log("global max time: " + globalMaxTime);
+
+         for (var siteName in sitesByName) {
+            var site = sitesByName[siteName];
+            //console.log("Site:" + site['name']);
+            site['times'] = new Int32Array(site['numRecords']);
+            site['values'] = new Float32Array(site['numRecords']);
+            globalMinTime = Math.min(globalMinTime, site['minTime']);
+            globalMaxTime = Math.max(globalMaxTime, site['maxTime']);
+            var idx = 0;
+            var startingByte = site['recordOffset'] * recordSize;
+            var endingByte = startingByte + (site['numRecords'] * recordSize);
+            //console.log("Bytes [" + startingByte + "] - [" + endingByte + "]");
+            for (var j = startingByte; j < endingByte; j += recordSize) {
+               site['times'][idx] = dataView.getInt32(j);
+
+               // Get the value, but divide it by 10 because the server has multiplied all
+               // values by 10 and saved as shorts in order to save space in the binary file.
+               // So, we need to convert back to the actual value here.
+               site['values'][idx] = dataView.getInt16(j + Int32Array.BYTES_PER_ELEMENT) / 10.0;
+               idx++;
             }
          }
 
-         console.log("global min time: " + globalMinTime);
-         console.log("global max time: " + globalMaxTime);
+         console.log("Preload complete!");
       })();
 
       this.addDataChangeListener = function(listener) {
@@ -240,7 +253,6 @@ else {
          var valueIndex = binarySearch(site['times'], clampTimeToInterval(site, timeInSecs), NUMERIC_COMPARATOR);
          return (valueIndex < 0) ? null : site['values'][valueIndex];
       };
-
 
       var createDataChangeEvent = function() {
          // TODO: improve this by only including sites whose clamped time has actually changed
