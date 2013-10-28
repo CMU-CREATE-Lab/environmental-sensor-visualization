@@ -93,10 +93,6 @@ if (!window['$']) {
                                     yAxis,
                                     {"style" : channel["style"], "localDisplay" : channel["time_type"] == "local"});
 
-      this.getDateAxis = function() {
-         return dateAxis;
-      }
-
       this.getYAxis = function() {
          return yAxis;
       }
