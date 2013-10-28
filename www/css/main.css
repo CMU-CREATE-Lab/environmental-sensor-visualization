@@ -141,6 +141,12 @@ body {
    margin-left: 2px;
 }
 
+#animationTimeLabel {
+   text-align: center;
+   color: #666666;
+   margin-top: 5px;
+}
+
 .channelInfo {
    display: table-cell;
    border-bottom: 1px solid black;

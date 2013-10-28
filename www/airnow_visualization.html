@@ -88,6 +88,10 @@
       var availablePlotColors = ["#990000", "#009900", "#000099", "#999900", "#6600ff"];
       var usedPlotColorsByDeviceId = {};
 
+      var isPlaying = false;
+      var timeoutHandle = null;
+      var t = null;
+
       window.grapherLoad = loadData;
 
       function loadData() {
@@ -165,6 +169,11 @@
          var globalTimeRange = dataManager.getGlobalTimeRange();
          dateAxis = new DateAxis("dateAxis", "horizontal", {"min" : globalTimeRange['min'], "max" : globalTimeRange['max']});
          dateAxis.addAxisChangeListener(function(cursorChangeEvent) {
+            // set the animation time here so that the user can click the plot to affect the animation playback position
+            t = cursorChangeEvent['cursorPosition'];
+            displayAnimationTime(t);
+
+            // notify the data manager of the axis change
             dataManager.setTimeRange({
                                         "min" : cursorChangeEvent['min'],
                                         "max" : cursorChangeEvent['max'],
@@ -297,7 +306,7 @@
          $("#" + getYAxisElementId(id) + "_info_container").remove();
          $("#" + getYAxisElementId(id) + "_channel_info_container").remove();
          returnPlotColor(id);
-         
+
          if (numCurrentlySelectedMarkers <= 0) {
             $("#grapherContainer").hide();
             $("#channelInfosContainer").hide();
@@ -338,7 +347,7 @@
                                                           minTimeFormatted : moment.unix(site['minTime']).format(TIMESTAMP_FORMAT),
                                                           maxTimeFormatted : moment.unix(site['maxTime']).format(TIMESTAMP_FORMAT)
                                                        }));
-         $("#" + yAxisElementId + "_channel_info_close_button").click(function(){
+         $("#" + yAxisElementId + "_channel_info_close_button").click(function() {
             setMarkerSelected(id, currentlySelectedMarkers[id], false)
          });
 
@@ -401,6 +410,10 @@
          $("#timeLabel").html(val ? moment.unix(val['date']).format(TIMESTAMP_FORMAT) : "");
       }
 
+      function displayAnimationTime(val) {
+         $("#animationTimeLabel").html(val ? moment.unix(val).format(TIMESTAMP_FORMAT) : "");
+      }
+
       function setSizes() {
          var plotContainerWidth = $(window).width() - 20 - Math.max($("#yAxesCell").width(), $("#legend").width()) - 2;
          var plotContainerHeight = $("#column0").height() - 2;
@@ -417,6 +430,44 @@
          dateAxis.setCursorPosition(time);
          dateAxis.setRange(time - dateAxisHalfRange, time + dateAxisHalfRange);
       }
+
+      function play() {
+         if (!isPlaying) {
+            isPlaying = true;
+            t = dateAxis.getMin();
+            $("#playButton").val("Stop");
+            computeAndRenderNextGeneration();
+         }
+         else {
+            isPlaying = false;
+            $("#playButton").val("Play");
+            window.clearTimeout(timeoutHandle);
+            timeoutHandle = null;
+         }
+      }
+
+      function computeAndRenderNextGeneration() {
+         if (t < dateAxis.getMax()) {
+            t += parseInt($("#playbackStepIntervalSecs").val());
+            if (t < dateAxis.getMax()) {
+               dateAxis.setCursorPosition(t);
+            }
+            else {
+              dateAxis.setCursorPosition(dateAxis.getMax());
+              play();
+           }
+         }
+         else {
+            dateAxis.setCursorPosition(dateAxis.getMax());
+            play();
+         }
+
+         if (isPlaying) {
+            window.clearTimeout(timeoutHandle);
+            timeoutHandle = window.setTimeout(computeAndRenderNextGeneration, $("#animationIntervalMillis").val());
+         }
+      }
+
    </script>
 
    <script id="legend_row_template" type="text/x-handlebars-template">
@@ -513,7 +564,37 @@
                   <div id="dateAxis"></div>
                </div>
             </td>
-            <td>&nbsp;</td>
+            <td>
+               <table border="0" cellpadding="0" cellspacing="0" align="center">
+                  <tr>
+                     <td><input id="playButton" type="button" onclick="play()" value="Play" style="margin-right:15px"></td>
+                     <td>step</td>
+                     <td>
+                        <select id="playbackStepIntervalSecs">
+                           <option value="3600">1 hour</option>
+                           <option value="21600">6 hours</option>
+                           <option value="43200">12 hours</option>
+                           <option value="86400">1 day</option>
+                           <option value="604800">1 week</option>
+                        </select>
+                     </td>
+                     <td>every</td>
+                     <td>
+                        <select id="animationIntervalMillis">
+                           <option value="1000">1</option>
+                           <option value="500" selected="selected">1/2</option>
+                           <option value="200">1/5</option>
+                           <option value="100">1/10</option>
+                        </select>
+                     </td>
+                     <td>second</td>
+                  </tr>
+                  <tr>
+                     <td colspan="6"><div id="animationTimeLabel"></div></td>
+                  </tr>
+               </table>
+
+            </td>
          </tr>
          <tr id="grapherContainer" style="display:none">
             <td width="400" id="column0">
