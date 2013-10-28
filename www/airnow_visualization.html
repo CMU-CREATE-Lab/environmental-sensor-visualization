@@ -85,8 +85,8 @@
       var currentlySelectedMarkers = {};
       var numCurrentlySelectedMarkers = 0;
       var MAX_NUM_SELECTED_MARKERS = 5;
-      var plotColors = ["#990000", "#009900", "#000099", "#999900", "#6600ff"];
-      var currentPlotColorIndex = 0;
+      var availablePlotColors = ["#990000", "#009900", "#000099", "#999900", "#6600ff"];
+      var usedPlotColorsByDeviceId = {};
 
       window.grapherLoad = loadData;
 
@@ -296,7 +296,8 @@
          $("#" + getYAxisElementId(id) + "_color_container").remove();
          $("#" + getYAxisElementId(id) + "_info_container").remove();
          $("#" + getYAxisElementId(id) + "_channel_info_container").remove();
-
+         returnPlotColor(id);
+         
          if (numCurrentlySelectedMarkers <= 0) {
             $("#grapherContainer").hide();
             $("#channelInfosContainer").hide();
@@ -304,11 +305,15 @@
          setSizes();
       }
 
-      function getPlotColor() {
-         if (currentPlotColorIndex >= plotColors.length) {
-            currentPlotColorIndex = 0;
-         }
-         return plotColors[currentPlotColorIndex++];
+      function reservePlotColor(id) {
+         var color = availablePlotColors.splice(0, 1)[0];
+         usedPlotColorsByDeviceId[id] = color;
+         return color;
+      }
+
+      function returnPlotColor(id) {
+         availablePlotColors.push(usedPlotColorsByDeviceId[id]);
+         delete usedPlotColorsByDeviceId[id];
       }
 
       function getYAxisElementId(id) {
@@ -321,7 +326,7 @@
          var site = dataManager.findByName(id);
 
          var yAxisElementId = getYAxisElementId(id);
-         var plotColor = getPlotColor();
+         var plotColor = reservePlotColor(id);
 
          $("#yAxes").append(yAxisTemplate({"yAxisElementId" : yAxisElementId}));
          $("#yAxesColor").append(yAxisColorTemplate({"yAxisElementId" : yAxisElementId, color : plotColor}));
