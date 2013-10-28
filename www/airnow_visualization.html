@@ -6,8 +6,9 @@
    <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCGR21nG0gjPnQZtlCbPIxpDcJ2T2fOrf8&sensor=false"></script>
    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
    <script src="js/handlebars.js"></script>
+   <script src="js/moment.min.js"></script>
    <script src="js/org/bodytrack/grapher/gwt/grapher2.nocache.js"></script>
-   <script src="js/org/bodytrack/grapher/Grapher.js"></script>
+   <script src="js/org/bodytrack/grapher/MultiplotGrapher.js"></script>
    <script src="js/org/cmucreatelab/visualization/DataManager.js"></script>
    <script src="js/org/cmucreatelab/array/util.js"></script>
    <script src="js/org/cmucreatelab/http/util.js"></script>
@@ -16,40 +17,48 @@
       var METADATA_URL = "binary/metadata.json";
       var DATA_URL = "binary/data.bin";
 
+      var TIMESTAMP_FORMAT = "YYYY-MM-DD HH:mm";
+
       // Got concentration descriptions and ranges from slides 5 and 11 in http://www.epa.gov/international/public-participation-guide/workshopPDFs/zell-aqi.pdf
       // and RGB color codes from http://www.airnowapi.org/aq101
       var PARTICLE_CONCENTRATION_INDEX = [
          {
+            min : 0,
             max : 15.4,
             name : "Good",
-            description : "None",
+            description : "Normal, healthy concentration. No suggested restrictions on activity.",
             color : "#00e400"
          },
          {
+            min : 15.5,
             max : 40.4,
             name : "Moderate",
             description : "Unusually sensitive people should reduce prolonged or heavy exertion",
             color : "#ffff00"
          },
          {
+            min : 40.5,
             max : 65.4,
             name : "Unhealthy for Sensitive Groups",
             description : "Sensitive groups should reduce prolonged or heavy exertion",
             color : "#ff7e00"
          },
          {
+            min : 65.5,
             max : 150.4,
             name : "Unhealthy",
             description : "Sensitive groups should avoid prolonged or heavy exertion; general public should reduce prolonged or heavy exertion",
             color : "#ff0000"
          },
          {
+            min : 150.5,
             max : 250.4,
             name : "Very Unhealthy",
             description : "Sensitive groups should avoid all physical activity outdoors; general public should avoid prolonged or heavy exertion",
             color : "#99004c"
          },
          {
+            min : 250.5,
             max : 500.4,
             name : "Hazardous",
             description : "Everyone should avoid all physical activity outdoors",
@@ -63,16 +72,21 @@
 
       var dataManager = null;
 
-      var grapherTemplate = null;
       var channelInfoTemplate = null;
+      var yAxisTemplate = null;
+      var yAxisColorTemplate = null;
+      var yAxisInfoTemplate = null;
       var dateAxis;
       var grapher;
       var plotContainer;
 
       var map;
       var markers = {};
-      var currentlySelectedMarker = null;
-      var currentlySelectedMarkerId = null;
+      var currentlySelectedMarkers = {};
+      var numCurrentlySelectedMarkers = 0;
+      var MAX_NUM_SELECTED_MARKERS = 5;
+      var plotColors = ["#990000", "#009900", "#000099", "#999900", "#6600ff"];
+      var currentPlotColorIndex = 0;
 
       window.grapherLoad = loadData;
 
@@ -122,11 +136,17 @@
 
          initializeMap();
 
-         console.log("AFter init map");
-
          // compile the templates for later use
-         grapherTemplate = Handlebars.compile($("#grapher_template").html());
          channelInfoTemplate = Handlebars.compile($("#channel_info_template").html());
+         yAxisTemplate = Handlebars.compile($("#y_axis_template").html());
+         yAxisColorTemplate = Handlebars.compile($("#y_axis_color_template").html());
+         yAxisInfoTemplate = Handlebars.compile($("#y_axis_info_template").html());
+
+         // create the legend
+         var legendRowTemplate = Handlebars.compile($("#legend_row_template").html());
+         $.each(PARTICLE_CONCENTRATION_INDEX, function(index, item) {
+            $("#legendTable").append(legendRowTemplate(item));
+         });
 
          // configure the DataManager
          dataManager.addDataChangeListener(function(valuesMap) {
@@ -141,7 +161,7 @@
             });
          });
 
-         // initialize the DateAxis
+         // initialize the DateAxis, Grapher, and PlotContainer
          var globalTimeRange = dataManager.getGlobalTimeRange();
          dateAxis = new DateAxis("dateAxis", "horizontal", {"min" : globalTimeRange['min'], "max" : globalTimeRange['max']});
          dateAxis.addAxisChangeListener(function(cursorChangeEvent) {
@@ -151,6 +171,8 @@
                                         "cursorPosition" : cursorChangeEvent['cursorPosition']
                                      });
          });
+         grapher = new org.bodytrack.grapher.MultiplotGrapher(dateAxis);
+         plotContainer = new PlotContainer("pc1", false, []);
 
          dataManager.setLatLongBounds(map.getBounds());
 
@@ -205,7 +227,7 @@
                                                    path : google.maps.SymbolPath.CIRCLE,
                                                    fillColor : '#00ff00',
                                                    fillOpacity : 0,
-                                                   strokeColor : '#0000ff',
+                                                   strokeColor : '#000000',
                                                    strokeOpacity : 0,
                                                    strokeWeight : 0,
                                                    scale : 4 //pixels
@@ -214,35 +236,35 @@
          google.maps.event.addListener(marker,
                                        'click',
                                        function() {
-                                          // de-select the previously-selected marker, if any
-                                          if (currentlySelectedMarker != null) {
-                                             setMarkerActive(currentlySelectedMarker, false);
-
-                                             // if the previously-selected marker is this one, then unselect it
-                                             // and remove the channel for it from the grapher.
-                                             if (id == currentlySelectedMarkerId) {
-                                                removeChannel(currentlySelectedMarkerId);
-                                                currentlySelectedMarker = null;
-                                                currentlySelectedMarkerId = null;
-                                                return;
+                                          // if the selected marker is already selected, then remove it
+                                          if (currentlySelectedMarkers.hasOwnProperty(id)) {
+                                             setMarkerSelected(id, currentlySelectedMarkers[id], false);
+                                             removeChannel(id);
+                                          }
+                                          else {
+                                             if (numCurrentlySelectedMarkers < MAX_NUM_SELECTED_MARKERS) {
+                                                setMarkerSelected(id, marker, true);
+                                                loadChannel(id);
                                              }
                                           }
-                                          // make this marker the current one, then set the icon
-                                          currentlySelectedMarker = marker;
-                                          currentlySelectedMarkerId = id;
-                                          setMarkerActive(currentlySelectedMarker, true);
-
-                                          loadChannel(currentlySelectedMarkerId);
                                        });
 
          markers[id] = marker;
       }
 
-      function setMarkerActive(marker, isActive) {
+      function setMarkerSelected(id, marker, isActive) {
          var icon = marker.getIcon();
          icon['strokeOpacity'] = isActive ? 1 : 0;
          icon['strokeWeight'] = isActive ? 2 : 0;
          marker.setOptions({ icon : icon });
+
+         if (isActive) {
+            currentlySelectedMarkers[id] = marker;
+         }
+         else {
+            delete currentlySelectedMarkers[id];
+         }
+         numCurrentlySelectedMarkers = numCurrentlySelectedMarkers + (isActive ? 1 : -1);
       }
 
       function getColorForValue(value) {
@@ -267,15 +289,49 @@
       }
 
       function removeChannel(id) {
-         $("#channelInfo").empty();
-         $("#grapherContainer").empty()
+         plotContainer.removePlot(grapher.getPlot(id));
+         grapher.removePlot(id);
+         $("#" + getYAxisElementId(id) + "_container").remove();
+         $("#" + getYAxisElementId(id) + "_color_container").remove();
+         $("#" + getYAxisElementId(id) + "_info_container").remove();
+         $("#" + getYAxisElementId(id) + "_channel_info_container").remove();
+
+         if (numCurrentlySelectedMarkers <= 0) {
+            $("#grapherContainer").hide();
+            $("#channelInfosContainer").hide();
+         }
+         setSizes();
+      }
+
+      function getPlotColor() {
+         if (currentPlotColorIndex >= plotColors.length) {
+            currentPlotColorIndex = 0;
+         }
+         return plotColors[currentPlotColorIndex++];
+      }
+
+      function getYAxisElementId(id) {
+         // WARNING! This assumes that the id has no spaces and that the
+         // line below will produce an legal value for an element id
+         return  "yAxis" + id;
       }
 
       function loadChannel(id) {
          var site = dataManager.findByName(id);
-         removeChannel(id);
-         $("#channelInfo").html(channelInfoTemplate({"name" : site['name']})).show();
-         $("#grapherContainer").html(grapherTemplate()).show();
+
+         var yAxisElementId = getYAxisElementId(id);
+         var plotColor = getPlotColor();
+
+         $("#yAxes").append(yAxisTemplate({"yAxisElementId" : yAxisElementId}));
+         $("#yAxesColor").append(yAxisColorTemplate({"yAxisElementId" : yAxisElementId, color : plotColor}));
+         $("#yAxesInfo").append(yAxisInfoTemplate({"yAxisElementId" : yAxisElementId}));
+         $("#channelInfos").append(channelInfoTemplate({
+                                                          "yAxisElementId" : yAxisElementId,
+                                                          device : site,
+                                                          color : plotColor,
+                                                          minTimeFormatted : moment.unix(site['minTime']).format(TIMESTAMP_FORMAT),
+                                                          maxTimeFormatted : moment.unix(site['maxTime']).format(TIMESTAMP_FORMAT)
+                                                       }));
 
          var channelDatasource = dataManager.getChannelDatasource(id);
          var channel = {
@@ -283,22 +339,14 @@
             "max" : site['maxValue'],
             "style" : {
                "styles" : [
-                  {"type" : "line", "lineWidth" : 1, "show" : true},
-                  {
-                     "type" : "lollipop",
-                     "lineWidth" : 1,
-                     "radius" : 0,
-                     "fill" : false,
-                     "show" : true,
-                     "color" : "#cccccc"
-                  }
+                  {"type" : "line", "lineWidth" : 1, "show" : true, color : plotColor}
                ],
                highlight : {
                   "lineWidth" : 1,
                   "styles" : [
                      {
                         "type" : "lollipop",
-                        "color" : "#ff0000",
+                        "color" : "#000000",
                         "radius" : 1,
                         "lineWidth" : 1,
                         "fill" : false
@@ -306,7 +354,7 @@
                      {
                         "show" : true,
                         "type" : "value",
-                        "fillColor" : "#ff0000",
+                        "fillColor" : "#000000",
                         "marginWidth" : 10,
                         "font" : "7pt Helvetica,Arial,Verdana,sans-serif",
                         "verticalOffset" : 7,
@@ -316,56 +364,110 @@
                }
             }
          };
-         grapher = new org.bodytrack.grapher.Grapher(channel, channelDatasource, dateAxis, "yAxis1");
-         grapher.addDataPointListener(function(val) {
-            if (val) {
-               $("#valueLabelText").show().html(val['dateString'] + " " + val['valueString']);
-               $("#valueLabelColor").show().css('background-color', getParticleConcentrationIndex(val['valueString'])['color']);
-            }
-            else {
-               $("#valueLabelText").hide();
-               $("#valueLabelColor").hide();
-            }
+         grapher.addPlot(id, channel, channelDatasource, yAxisElementId);
+         grapher.addDataPointListener(id, displayTimeForDataPoint);
+         grapher.addDataPointListener(id, function(val) {
+            displayValueForDataPoint(id, val ? val['valueString'] : null);
          });
-         plotContainer = new PlotContainer("pc1", false, [grapher.getPlot()]);
+         plotContainer.addPlot(grapher.getPlot(id));
 
-         // set initial sizes
+         $("#grapherContainer").show();
+         $("#channelInfosContainer").show();
+
          setSizes();
       }
 
+      function displayValueForDataPoint(id, val) {
+         var yAxisElementId = getYAxisElementId(id);
+         if (val) {
+            $("#" + yAxisElementId + "_valueLabelText").show().html(val);
+            $("#" + yAxisElementId + "_valueLabelColor").show().css('background-color', getParticleConcentrationIndex(val)['color']);
+         }
+         else {
+            $("#" + yAxisElementId + "_valueLabelText").hide();
+            $("#" + yAxisElementId + "_valueLabelColor").hide();
+         }
+      }
+      function displayTimeForDataPoint(val) {
+         $("#timeLabel").html(val ? moment.unix(val['date']).format(TIMESTAMP_FORMAT) : "");
+      }
+
       function setSizes() {
-         var plotContainerWidth = $(window).width() - 20 - $("#column2").width() - $("#column3").width() - 2;
-         var plotContainerHeight = $("#column1").height() - 2;
+         var plotContainerWidth = $(window).width() - 20 - Math.max($("#yAxesCell").width(), $("#legend").width()) - 2;
+         var plotContainerHeight = $("#column0").height() - 2;
 
-         // resize date axis
+         // resize date axis, plot container, and y axes
          dateAxis.setSize(plotContainerWidth, $("#dateAxis").height(), SequenceNumber.getNext());
-
-         if (plotContainer != null) {
-            plotContainer.setSize(plotContainerWidth, plotContainerHeight, SequenceNumber.getNext());
-         }
-
-         if (grapher != null) {
-            var yAxisElement = $("#yAxis1");
-            grapher.getYAxis().setSize(yAxisElement.width(), yAxisElement.height(), SequenceNumber.getNext())
-         }
+         plotContainer.setSize(plotContainerWidth, plotContainerHeight, SequenceNumber.getNext());
+         grapher.updateYAxesSizes();
+         $(".channelInfo").width((plotContainerWidth) / MAX_NUM_SELECTED_MARKERS);
       }
    </script>
 
-   <script id="grapher_template" type="text/x-handlebars-template">
-      <td width="400" id="column1">
-         <div id="plotContainer1" class="plotContainer">
-            <div id="pc1" class="plot"></div>
+   <script id="legend_row_template" type="text/x-handlebars-template">
+      <tr valign="bottom">
+         <td>
+            <a href="#" onclick="return false;" title="{{description}}" style="cursor:default">
+               <div class="legendColor" style="background-color: {{color}}"></div>
+            </a>
+         </td>
+         <td>{{name}}</td>
+         <td align="right">{{min}} - {{max}} &#181;g/m<sup>3</sup></td>
+      </tr>
+   </script>
+
+   <script id="y_axis_template" type="text/x-handlebars-template">
+      <td id="{{yAxisElementId}}_container" class="axisCell">
+         <div class="yAxisContainer">
+            <div id="{{yAxisElementId}}" class="yAxis"></div>
          </div>
       </td>
-      <td id="column2" class="axisCell">
-         <div id="yAxisContainer1" class="yAxisContainer">
-            <div id="yAxis1" class="yAxis"></div>
-         </div>
+   </script>
+
+   <script id="y_axis_color_template" type="text/x-handlebars-template">
+      <td id="{{yAxisElementId}}_color_container">
+         <div class="yAxisColor" style="background-color:{{color}}"></div>
+      </td>
+   </script>
+
+   <script id="y_axis_info_template" type="text/x-handlebars-template">
+      <td id="{{yAxisElementId}}_info_container">
+         <table border="0" cellpadding="0" cellspacing="0" align="right">
+            <tr>
+               <td>
+                  <div id="{{yAxisElementId}}_valueLabelText" class="valueLabelText"></div>
+               </td>
+               <td>
+                  <div id="{{yAxisElementId}}_valueLabelColor" class="valueLabelColor"></div>
+               </td>
+            </tr>
+         </table>
       </td>
    </script>
 
    <script id="channel_info_template" type="text/x-handlebars-template">
-      <h2>{{name}}</h2>
+      <div id="{{yAxisElementId}}_channel_info_container" class="channelInfo">
+         <div class="yAxisColor" style="background-color:{{color}};border-right:none"></div>
+         <div class="deviceName"><b>{{device.name}}</b></div>
+         <table border="0" cellpadding="0" cellspacing="0">
+            <tr>
+               <td class="channelInfoLabel">Start Time:</td>
+               <td>&nbsp;</td>
+               <td align="right">{{minTimeFormatted}}</td>
+            </tr>
+            <tr>
+               <td class="channelInfoLabel">End Time:</td>
+               <td>&nbsp;</td>
+               <td align="right">{{maxTimeFormatted}}</td>
+            </tr>
+            <tr>
+               <td class="channelInfoLabel">Max Value:</td>
+               <td>&nbsp;</td>
+               <td align="right">{{device.maxValue}} &#181;g/m<sup>3</sup></td>
+            </tr>
+         </table>
+
+      </div>
    </script>
 </head>
 <body>
@@ -373,11 +475,17 @@
 <div id="main_panel">
    <div id="grapher_area" class="textSelectionDisabled">
       <table id="grapher" border="0" cellpadding="0" cellspacing="0">
-         <tr>
+         <tr valign="top">
             <td width="400">
                <div id="mapArea">Map goes here</div>
             </td>
-            <td>&nbsp;</td>
+            <td id="legend">
+               <table id="legendTable" border="0" cellpadding="3" cellspacing="0" style="margin-left: 5px">
+                  <tr>
+                     <td colspan="3" align="center"><b>U.S. EPA PM<sub>2.5</sub> AQI</b></td>
+                  </tr>
+               </table>
+            </td>
          </tr>
          <tr>
             <td width="400">
@@ -387,24 +495,29 @@
             </td>
             <td>&nbsp;</td>
          </tr>
-         <tr id="grapherContainer">
-         </tr>
-         <tr>
-            <td align="right">
-               <div id="valueLabel">
-                  <table border="0" cellpadding="0" cellspacing="0" align="right">
-                     <tr>
-                        <td><div id="valueLabelText"></div></td>
-                        <td><div id="valueLabelColor"></div></td>
-                     </tr>
-                  </table>
+         <tr id="grapherContainer" style="display:none">
+            <td width="400" id="column0">
+               <div id="plotContainer1" class="plotContainer">
+                  <div id="pc1" class="plot"></div>
                </div>
+            </td>
+            <td rowspan="2" valign="top" id="yAxesCell">
+               <table border="0" cellpadding="0" cellspacing="0">
+                  <tr id="yAxes"></tr>
+                  <tr id="yAxesColor"></tr>
+                  <tr id="yAxesInfo"></tr>
+               </table>
+               <div id="timeLabel"></div>
+            </td>
+         </tr>
+         <tr id="channelInfosContainer" valign="top" style="display:none">
+            <td>
+               <div id="channelInfos" style="display: table-row"></div>
             </td>
             <td>&nbsp;</td>
          </tr>
       </table>
    </div>
-   <div id="channelInfo"></div>
 </div>
 </body>
 </html>

@@ -26,6 +26,27 @@ body {
    display: none;
 }
 
+#legend {
+   width: 300px;
+   min-width: 300px;
+   max-width: 300px;
+}
+
+#legend td {
+   font-size: 8pt;
+}
+
+.legendColor {
+   border: 1px solid black;
+   width: 20px;
+   height: 20px;
+   min-width: 20px;
+   min-height: 20px;
+   max-width: 20px;
+   max-height: 20px;
+   line-height: 20px;
+}
+
 #mapArea {
    border: 1px solid black;
    width: auto;
@@ -38,7 +59,7 @@ body {
 }
 
 #dateAxisContainer {
-   height: 70px;
+   height: 60px;
    border: 1px solid black;
    border-top-width: 0;
    border-bottom-width: 0;
@@ -46,34 +67,40 @@ body {
 
 #dateAxis {
    width: auto;
-   height: 70px;
+   height: 60px;
    z-index: 2;
 }
 
 .axisCell {
    width: 50px;
-   height: 200px;
+   height: 250px;
 }
 
 .yAxisContainer {
    width: 50px;
-   height: 200px;
+   height: 250px;
    border: 1px solid black;
    border-left-width: 0;
 }
 
 .yAxis {
    width: 50px;
-   height: 200px;
+   height: 250px;
+}
+
+.yAxisColor {
+   height: 5px;
+   margin-bottom: 3px;
+   border-right: 1px solid black;
 }
 
 .plotContainer {
-   height: 200px;
+   height: 250px;
    border: 1px solid black;
 }
 
 .plot {
-   height: 200px;
+   height: 250px;
 }
 
 #valueLabel {
@@ -84,15 +111,15 @@ body {
    padding: 0 5px 0 5px;
 }
 
-#valueLabelText {
+.valueLabelText {
+   font-size: 8pt;
    display: none;
    color: #666666;
    width: auto;
-   min-width: 200px;
    text-align: right;
 }
 
-#valueLabelColor {
+.valueLabelColor {
    display: none;
    border: 1px solid black;
    width: 10px;
@@ -103,4 +130,38 @@ body {
    max-height: 10px;
    line-height: 10px;
    margin-left: 5px;
+}
+
+#timeLabel {
+   text-align: left;
+   width: 203px;
+   min-width: 203px;
+   max-width: 203px;
+   color: #666666;
+   margin-left: 2px;
+}
+
+.channelInfo {
+   display: table-cell;
+   border-bottom: 1px solid black;
+   border-right: 1px solid black;
+   border-top: none;
+   font-size: 8pt;
+}
+
+.channelInfo td {
+   font-size: 8pt;
+}
+
+.channelInfoLabel {
+   font-weight: bold;
+}
+
+.channelInfo:first-of-type {
+   border-left: 1px solid black;
+}
+
+.deviceName {
+   font-size: 10pt;
+   font-weight: bold;
 }
