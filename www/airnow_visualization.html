@@ -239,12 +239,10 @@
                                           // if the selected marker is already selected, then remove it
                                           if (currentlySelectedMarkers.hasOwnProperty(id)) {
                                              setMarkerSelected(id, currentlySelectedMarkers[id], false);
-                                             removeChannel(id);
                                           }
                                           else {
                                              if (numCurrentlySelectedMarkers < MAX_NUM_SELECTED_MARKERS) {
                                                 setMarkerSelected(id, marker, true);
-                                                loadChannel(id);
                                              }
                                           }
                                        });
@@ -252,19 +250,22 @@
          markers[id] = marker;
       }
 
-      function setMarkerSelected(id, marker, isActive) {
+      function setMarkerSelected(id, marker, isSelected) {
          var icon = marker.getIcon();
-         icon['strokeOpacity'] = isActive ? 1 : 0;
-         icon['strokeWeight'] = isActive ? 2 : 0;
+         icon['strokeOpacity'] = isSelected ? 1 : 0;
+         icon['strokeWeight'] = isSelected ? 2 : 0;
          marker.setOptions({ icon : icon });
 
-         if (isActive) {
+         if (isSelected) {
             currentlySelectedMarkers[id] = marker;
          }
          else {
             delete currentlySelectedMarkers[id];
          }
-         numCurrentlySelectedMarkers = numCurrentlySelectedMarkers + (isActive ? 1 : -1);
+         numCurrentlySelectedMarkers = numCurrentlySelectedMarkers + (isSelected ? 1 : -1);
+
+         // finally, add or remove the channel as appropriate
+         (isSelected) ? loadChannel(id) : removeChannel(id);
       }
 
       function getColorForValue(value) {
@@ -332,6 +333,9 @@
                                                           minTimeFormatted : moment.unix(site['minTime']).format(TIMESTAMP_FORMAT),
                                                           maxTimeFormatted : moment.unix(site['maxTime']).format(TIMESTAMP_FORMAT)
                                                        }));
+         $("#" + yAxisElementId + "_channel_info_close_button").click(function(){
+            setMarkerSelected(id, currentlySelectedMarkers[id], false)
+         });
 
          var channelDatasource = dataManager.getChannelDatasource(id);
          var channel = {
@@ -448,6 +452,7 @@
    <script id="channel_info_template" type="text/x-handlebars-template">
       <div id="{{yAxisElementId}}_channel_info_container" class="channelInfo">
          <div class="yAxisColor" style="background-color:{{color}};border-right:none"></div>
+         <div id="{{yAxisElementId}}_channel_info_close_button" class="closeButton" style="float:right;margin-right:3px"></div>
          <div class="deviceName"><b>{{device.name}}</b></div>
          <table border="0" cellpadding="0" cellspacing="0">
             <tr>
