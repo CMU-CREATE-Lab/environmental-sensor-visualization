@@ -406,6 +406,12 @@
          grapher.updateYAxesSizes();
          $(".channelInfo").width((plotContainerWidth) / MAX_NUM_SELECTED_MARKERS);
       }
+
+      function jumpToTime(time) {
+         var dateAxisHalfRange = (dateAxis.getMax() - dateAxis.getMin()) / 2;
+         dateAxis.setCursorPosition(time);
+         dateAxis.setRange(time - dateAxisHalfRange, time + dateAxisHalfRange);
+      }
    </script>
 
    <script id="legend_row_template" type="text/x-handlebars-template">
@@ -458,20 +464,24 @@
             <tr>
                <td class="channelInfoLabel">Start Time:</td>
                <td>&nbsp;</td>
-               <td align="right">{{minTimeFormatted}}</td>
+               <td align="right"><a href="#" onclick="jumpToTime({{device.minTime}}); return false;">{{minTimeFormatted}}</a></td>
             </tr>
             <tr>
                <td class="channelInfoLabel">End Time:</td>
                <td>&nbsp;</td>
-               <td align="right">{{maxTimeFormatted}}</td>
+               <td align="right"><a href="#" onclick="jumpToTime({{device.maxTime}}); return false;">{{maxTimeFormatted}}</a></td>
             </tr>
             <tr>
                <td class="channelInfoLabel">Max Value:</td>
                <td>&nbsp;</td>
-               <td align="right">{{device.maxValue}} &#181;g/m<sup>3</sup></td>
+               <td align="right"><a href="#" onclick="jumpToTime({{device.maxValueTime}}); return false;">{{device.maxValue}} &#181;g/m<sup>3</sup></a></td>
+            </tr>
+            <tr>
+               <td class="channelInfoLabel">Min Value:</td>
+               <td>&nbsp;</td>
+               <td align="right"><a href="#" onclick="jumpToTime({{device.minValueTime}}); return false;">{{device.minValue}} &#181;g/m<sup>3</sup></a></td>
             </tr>
          </table>
-
       </div>
    </script>
 </head>
