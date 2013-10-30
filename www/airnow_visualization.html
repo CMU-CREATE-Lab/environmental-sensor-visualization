@@ -8,10 +8,10 @@
    <script src="lib/handlebars.js"></script>
    <script src="lib/moment.min.js"></script>
    <script src="lib/commons-javascript/org/cmucreatelab/util/Arrays.js"></script>
+   <script src="lib/commons-javascript/org/cmucreatelab/util/Http.js"></script>
    <script src="js/org/bodytrack/grapher/gwt/grapher2.nocache.js"></script>
    <script src="js/org/bodytrack/grapher/MultiplotGrapher.js"></script>
    <script src="js/org/cmucreatelab/visualization/DataManager.js"></script>
-   <script src="js/org/cmucreatelab/http/util.js"></script>
    <script language="JavaScript" type="text/javascript">
 
       var METADATA_URL = "binary/metadata.json";
@@ -118,20 +118,20 @@
       }
 
       function loadBinaryData(sitesMetadata) {
-         loadArrayBuffer("binary/data.bin",
-                         {
-                            success : function(arrayBuffer) {
-                               console.log("loadArrayBuffer SUCCESS!");
-                               dataManager = new org.cmucreatelab.visualization.DataManager(sitesMetadata, arrayBuffer);
+         org.cmucreatelab.util.Http.loadArrayBuffer("binary/data.bin",
+                                                    {
+                                                       success : function(arrayBuffer) {
+                                                          console.log("loadArrayBuffer SUCCESS!");
+                                                          dataManager = new org.cmucreatelab.visualization.DataManager(sitesMetadata, arrayBuffer);
 
-                               // now that all the data is loaded, go ahead and initialize the page
-                               initialize();
-                            },
-                            failure : function(requestStatus) {
-                               // TODO: do something better
-                               alert("Failed to load the data (Request Status: " + requestStatus + ")");
-                            }
-                         });
+                                                          // now that all the data is loaded, go ahead and initialize the page
+                                                          initialize();
+                                                       },
+                                                       failure : function(requestStatus) {
+                                                          // TODO: do something better
+                                                          alert("Failed to load the data (Request Status: " + requestStatus + ")");
+                                                       }
+                                                    });
       }
 
       function initialize() {
@@ -453,9 +453,9 @@
                dateAxis.setCursorPosition(t);
             }
             else {
-              dateAxis.setCursorPosition(dateAxis.getMax());
-              play();
-           }
+               dateAxis.setCursorPosition(dateAxis.getMax());
+               play();
+            }
          }
          else {
             dateAxis.setCursorPosition(dateAxis.getMax());
@@ -590,7 +590,9 @@
                      <td>second</td>
                   </tr>
                   <tr>
-                     <td colspan="6"><div id="animationTimeLabel"></div></td>
+                     <td colspan="6">
+                        <div id="animationTimeLabel"></div>
+                     </td>
                   </tr>
                </table>
 
