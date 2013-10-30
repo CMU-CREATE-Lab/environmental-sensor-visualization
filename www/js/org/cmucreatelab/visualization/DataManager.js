@@ -1,5 +1,5 @@
 //======================================================================================================================
-// An data manager for preloaded, interval data.  We define "interval data" as data that is reported at fixed, known
+// A data manager for preloaded, interval data.  We define "interval data" as data that is reported at fixed, known
 // interval between reports (e.g. a Speck sensor configured to record samples every 5 seconds).
 //
 // Dependencies:
@@ -54,16 +54,6 @@ else {
 //======================================================================================================================
 (function() {
    org.cmucreatelab.visualization.DataManager = function(metadata, dataArrayBuffer) {
-
-      var NUMERIC_COMPARATOR = function(a, b) {
-         if (a < b) {
-            return -1;
-         }
-         if (a > b) {
-            return 1;
-         }
-         return 0;
-      };
 
       var FIELD_COMPARATOR = function(fieldName) {
          return function(a, b) {
@@ -249,8 +239,9 @@ else {
       var clampTimeToInterval = function(site, t) {
          return t - (t % site['valueInterval'])
       }
+
       var getValueAtTime = function(site, timeInSecs) {
-         var valueIndex = binarySearch(site['times'], clampTimeToInterval(site, timeInSecs), NUMERIC_COMPARATOR);
+         var valueIndex = org.cmucreatelab.util.Arrays.binarySearch(site['times'], clampTimeToInterval(site, timeInSecs), org.cmucreatelab.util.Arrays.NUMERIC_COMPARATOR);
          return (valueIndex < 0) ? null : site['values'][valueIndex];
       };
 
