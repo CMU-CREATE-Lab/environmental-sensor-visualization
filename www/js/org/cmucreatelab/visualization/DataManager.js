@@ -212,7 +212,8 @@ else {
                "level" : level,
                "offset" : offset,
                "sample_width" : sampleWidthInSecs,
-               "data" : []
+               "data" : [],
+               "type" : "value"
             };
 
             var site = sitesByName[name];

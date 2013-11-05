@@ -293,7 +293,8 @@ if (!org.bodytrack.datastore.ChannelDatasource) {
                "level" : level,
                "offset" : offset,
                "sample_width" : sampleWidthInSecs,
-               "data" : []
+               "data" : [],
+               "type" : "value"
             };
 
             var t = offsetTimeInSecs;
