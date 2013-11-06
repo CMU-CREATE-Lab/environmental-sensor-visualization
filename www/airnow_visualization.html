@@ -102,9 +102,9 @@
                    timeout : 5000,
                    cache : false,
                    global : false,
-                   success : function(sitesMetadata) {
-                      if (sitesMetadata && sitesMetadata['sites']) {
-                         loadBinaryData(sitesMetadata);
+                   success : function(devicesMetadata) {
+                      if (devicesMetadata && devicesMetadata['devices']) {
+                         loadBinaryData(devicesMetadata);
                       }
                       else {
                          console.log("Failed to load " + METADATA_URL);
@@ -117,12 +117,12 @@
 
       }
 
-      function loadBinaryData(sitesMetadata) {
+      function loadBinaryData(devicesMetadata) {
          org.cmucreatelab.util.Http.loadArrayBuffer(DATA_URL,
                                                     {
                                                        success : function(arrayBuffer) {
                                                           console.log("loadArrayBuffer SUCCESS!");
-                                                          dataManager = new org.cmucreatelab.visualization.DataManager(sitesMetadata, arrayBuffer);
+                                                          dataManager = new org.cmucreatelab.visualization.DataManager(devicesMetadata, arrayBuffer);
 
                                                           // now that all the data is loaded, go ahead and initialize the page
                                                           initialize();
@@ -217,9 +217,9 @@
       }
 
       function initializeMarkers() {
-         dataManager.forEachSite(function(site) {
-            var latLong = new google.maps.LatLng(site['latitude'], site['longitude'])
-            addMarker(site['name'], latLong, true)
+         dataManager.forEachDevice(function(device) {
+            var latLong = new google.maps.LatLng(device['latitude'], device['longitude'])
+            addMarker(device['name'], latLong, true)
          });
 
          // set initial cursor to the midpoint of the available data--this will trigger the data change event,
@@ -327,12 +327,12 @@
 
       function getYAxisElementId(id) {
          // WARNING! This assumes that the id has no spaces and that the
-         // line below will produce an legal value for an element id
+         // line below will produce a legal value for a DOM element id
          return  "yAxis" + id;
       }
 
       function loadChannel(id) {
-         var site = dataManager.findByName(id);
+         var device = dataManager.findByName(id);
 
          var yAxisElementId = getYAxisElementId(id);
          var plotColor = reservePlotColor(id);
@@ -342,10 +342,10 @@
          $("#yAxesInfo").append(yAxisInfoTemplate({"yAxisElementId" : yAxisElementId}));
          $("#channelInfos").append(channelInfoTemplate({
                                                           "yAxisElementId" : yAxisElementId,
-                                                          device : site,
+                                                          device : device,
                                                           color : plotColor,
-                                                          minTimeFormatted : moment.unix(site['minTime']).format(TIMESTAMP_FORMAT),
-                                                          maxTimeFormatted : moment.unix(site['maxTime']).format(TIMESTAMP_FORMAT)
+                                                          minTimeFormatted : moment.unix(device['minTime']).format(TIMESTAMP_FORMAT),
+                                                          maxTimeFormatted : moment.unix(device['maxTime']).format(TIMESTAMP_FORMAT)
                                                        }));
          $("#" + yAxisElementId + "_channel_info_close_button").click(function() {
             setMarkerSelected(id, currentlySelectedMarkers[id], false)
@@ -353,8 +353,8 @@
 
          var channelDatasource = dataManager.getChannelDatasource(id);
          var channel = {
-            "min" : site['minValue'],
-            "max" : site['maxValue'],
+            "min" : device['minValue'],
+            "max" : device['maxValue'],
             "style" : {
                "styles" : [
                   {"type" : "line", "lineWidth" : 1, "show" : true, color : plotColor}

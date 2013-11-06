@@ -69,7 +69,7 @@ else {
 
       var NAME_COMPARATOR = FIELD_COMPARATOR('name')
 
-      var SITE_FIELD_COMPARATOR = function(fieldName) {
+      var DEVICE_FIELD_COMPARATOR = function(fieldName) {
          return function(a, b) {
             if (a[fieldName] < b[fieldName]) {
                return -1;
@@ -86,13 +86,13 @@ else {
          }
       };
 
-      var LATITUDE_COMPARATOR = SITE_FIELD_COMPARATOR('latitude');
-      var LONGITUDE_COMPARATOR = SITE_FIELD_COMPARATOR('longitude');
+      var LATITUDE_COMPARATOR = DEVICE_FIELD_COMPARATOR('latitude');
+      var LONGITUDE_COMPARATOR = DEVICE_FIELD_COMPARATOR('longitude');
 
       var globalMinTime = new Date().getTime() / 1000;
       var globalMaxTime = 0;
 
-      var sitesByName = {};
+      var devicesByName = {};
 
       var currentLatLongBounds = null;
       var currentTimeRange = null;              // stores both the current time range and the cursor's position
@@ -108,39 +108,39 @@ else {
 
          //--------------------------------------
 
-         // First compute the global min and max times and populate the sitesByName map.
-         var numSites = 0;
-         for (var i = 0; i < metadata['sites'].length; i++) {
-            var site = metadata['sites'][i];
-            if (site['numRecords'] > 0) {
-               globalMinTime = Math.min(globalMinTime, site['minTime']);
-               globalMaxTime = Math.max(globalMaxTime, site['maxTime']);
-               sitesByName[site['name']] = site;
-               numSites++;
+         // First compute the global min and max times and populate the devicesByName map.
+         var numDevices = 0;
+         for (var i = 0; i < metadata['devices'].length; i++) {
+            var device = metadata['devices'][i];
+            if (device['numRecords'] > 0) {
+               globalMinTime = Math.min(globalMinTime, device['minTime']);
+               globalMaxTime = Math.max(globalMaxTime, device['maxTime']);
+               devicesByName[device['name']] = device;
+               numDevices++;
             }
          }
-         console.log("numSites:        " + numSites);
+         console.log("numDevices:      " + numDevices);
          console.log("global min time: " + globalMinTime);
          console.log("global max time: " + globalMaxTime);
 
-         for (var siteName in sitesByName) {
-            var site = sitesByName[siteName];
-            //console.log("Site:" + site['name']);
-            site['times'] = new Int32Array(site['numRecords']);
-            site['values'] = new Float32Array(site['numRecords']);
-            globalMinTime = Math.min(globalMinTime, site['minTime']);
-            globalMaxTime = Math.max(globalMaxTime, site['maxTime']);
+         for (var deviceName in devicesByName) {
+            var device = devicesByName[deviceName];
+            //console.log("Device:" + device['name']);
+            device['times'] = new Int32Array(device['numRecords']);
+            device['values'] = new Float32Array(device['numRecords']);
+            globalMinTime = Math.min(globalMinTime, device['minTime']);
+            globalMaxTime = Math.max(globalMaxTime, device['maxTime']);
             var idx = 0;
-            var startingByte = site['recordOffset'] * recordSize;
-            var endingByte = startingByte + (site['numRecords'] * recordSize);
+            var startingByte = device['recordOffset'] * recordSize;
+            var endingByte = startingByte + (device['numRecords'] * recordSize);
             //console.log("Bytes [" + startingByte + "] - [" + endingByte + "]");
             for (var j = startingByte; j < endingByte; j += recordSize) {
-               site['times'][idx] = dataView.getInt32(j);
+               device['times'][idx] = dataView.getInt32(j);
 
                // Get the value, but divide it by 10 because the server has multiplied all
                // values by 10 and saved as shorts in order to save space in the binary file.
                // So, we need to convert back to the actual value here.
-               site['values'][idx] = dataView.getInt16(j + Int32Array.BYTES_PER_ELEMENT) / 10.0;
+               device['values'][idx] = dataView.getInt16(j + Int32Array.BYTES_PER_ELEMENT) / 10.0;
                idx++;
             }
          }
@@ -190,16 +190,16 @@ else {
          }
       };
 
-      this.forEachSite = function(callback) {
+      this.forEachDevice = function(callback) {
          if (typeof callback === 'function') {
-            for (var name in sitesByName) {
-               callback(sitesByName[name]);
+            for (var name in devicesByName) {
+               callback(devicesByName[name]);
             }
          }
       };
 
       this.findByName = function(name) {
-         return sitesByName[name];
+         return devicesByName[name];
       }
 
       this.getChannelDatasource = function(name) {
@@ -216,14 +216,14 @@ else {
                "type" : "value"
             };
 
-            var site = sitesByName[name];
+            var device = devicesByName[name];
             var t = offsetTimeInSecs;
             var previousClampedTime = null;
             var previousClampedValue = null;
             for (var i = 0; i < 512; i++) {
-               var clampedTime = clampTimeToInterval(site, t);
+               var clampedTime = clampTimeToInterval(device, t);
                if (clampedTime != previousClampedTime) {
-                  var value = getValueAtTime(site, clampedTime);
+                  var value = getValueAtTime(device, clampedTime);
                   if (value != null) {
                      json['data'].push([clampedTime, value, 0, 0])
                   }
@@ -237,21 +237,21 @@ else {
          };
       }
 
-      var clampTimeToInterval = function(site, t) {
-         return t - (t % site['valueInterval'])
+      var clampTimeToInterval = function(device, t) {
+         return t - (t % device['valueInterval'])
       }
 
-      var getValueAtTime = function(site, timeInSecs) {
-         var valueIndex = org.cmucreatelab.util.Arrays.binarySearch(site['times'], clampTimeToInterval(site, timeInSecs), org.cmucreatelab.util.Arrays.NUMERIC_COMPARATOR);
-         return (valueIndex < 0) ? null : site['values'][valueIndex];
+      var getValueAtTime = function(device, timeInSecs) {
+         var valueIndex = org.cmucreatelab.util.Arrays.binarySearch(device['times'], clampTimeToInterval(device, timeInSecs), org.cmucreatelab.util.Arrays.NUMERIC_COMPARATOR);
+         return (valueIndex < 0) ? null : device['values'][valueIndex];
       };
 
       var createDataChangeEvent = function() {
-         // TODO: improve this by only including sites whose clamped time has actually changed
+         // TODO: improve this by only including devices whose clamped time has actually changed
          var values = {};
-         for (var name in sitesByName) {
-            var site = sitesByName[name];
-            values[site['name']] = getValueAtTime(site, currentTimeRange['cursorPosition']);
+         for (var name in devicesByName) {
+            var device = devicesByName[name];
+            values[device['name']] = getValueAtTime(device, currentTimeRange['cursorPosition']);
          }
 
          return values;

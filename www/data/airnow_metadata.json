@@ -1,4 +1,4 @@
-{"sites" : [
+{"devices" : [
 {"name":"1NL_Navajo_Lake","latitude":36.8097,"longitude":-107.6517,"minTime":1251529200,"maxTime":1370037600,"minValue":-4.9,"maxValue":110.0,"minValueTime":1311879600,"maxValueTime":1273618800,"valueInterval":3600,"numRecords":22554,"recordOffset":0},
 {"name":"2LL_Los_Lunas","latitude":34.8147,"longitude":-106.7397,"minTime":1251529200,"maxTime":1370037600,"minValue":-4.0,"maxValue":213.0,"minValueTime":1306004400,"maxValueTime":1307167200,"valueInterval":3600,"numRecords":22454,"recordOffset":22554},
 {"name":"ADEQ_DSR","latitude":34.6811,"longitude":-92.3283,"minTime":1251529200,"maxTime":1370062800,"minValue":-4.0,"maxValue":94.0,"minValueTime":1369191600,"maxValueTime":1312282800,"valueInterval":3600,"numRecords":23479,"recordOffset":45008},
