@@ -14,8 +14,8 @@
    <script src="js/org/cmucreatelab/visualization/DataManager.js"></script>
    <script language="JavaScript" type="text/javascript">
 
-      var METADATA_URL = "binary/metadata.json";
-      var DATA_URL = "binary/data.bin";
+      var METADATA_URL = "data/airnow_metadata.json";
+      var DATA_URL = "data/airnow_data.bin";
 
       var TIMESTAMP_FORMAT = "YYYY-MM-DD HH:mm";
 
@@ -107,18 +107,18 @@
                          loadBinaryData(sitesMetadata);
                       }
                       else {
-                         console.log("Failed to load metadata.json");
+                         console.log("Failed to load " + METADATA_URL);
                       }
                    },
                    error : function() {
-                      console.log("Failed to load metadata.json");
+                      console.log("Failed to load " + METADATA_URL);
                    }
                 });
 
       }
 
       function loadBinaryData(sitesMetadata) {
-         org.cmucreatelab.util.Http.loadArrayBuffer("binary/data.bin",
+         org.cmucreatelab.util.Http.loadArrayBuffer(DATA_URL,
                                                     {
                                                        success : function(arrayBuffer) {
                                                           console.log("loadArrayBuffer SUCCESS!");
@@ -129,7 +129,7 @@
                                                        },
                                                        failure : function(requestStatus) {
                                                           // TODO: do something better
-                                                          alert("Failed to load the data (Request Status: " + requestStatus + ")");
+                                                          alert("Failed to load the data from [" + DATA_URL + "] (Request Status: " + requestStatus + ")");
                                                        }
                                                     });
       }
