@@ -107,11 +107,19 @@ if (!window['$']) {
       };
 
       this.getYAxis = function(plotId) {
-         return plotsAndYAxes[plotId]['yAxis'];
+         var plotAndYAxis = plotsAndYAxes[plotId];
+         if (typeof plotAndYAxis !== 'undefined') {
+            return plotAndYAxis['yAxis'];
+         }
+         return null;
       };
 
       this.getPlot = function(plotId) {
-         return plotsAndYAxes[plotId]['plot'];
+         var plotAndYAxis = plotsAndYAxes[plotId];
+         if (typeof plotAndYAxis !== 'undefined') {
+            return plotAndYAxis['plot'];
+         }
+         return null;
       };
 
       this.updateYAxesSizes = function() {
