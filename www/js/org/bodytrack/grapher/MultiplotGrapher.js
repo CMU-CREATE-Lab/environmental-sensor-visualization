@@ -78,7 +78,7 @@ if (!window['$']) {
             padding = 0.5;
          }
          else {
-            padding = 0.1 * yDiff;
+            padding = 0.05 * yDiff;
          }
 
          return new NumberAxis(yAxisElementId,
