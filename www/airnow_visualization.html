@@ -12,6 +12,7 @@
    <script src="js/org/bodytrack/grapher/gwt/grapher2.nocache.js"></script>
    <script src="js/org/bodytrack/grapher/MultiplotGrapher.js"></script>
    <script src="js/org/cmucreatelab/visualization/DataManager.js"></script>
+   <script src="js/org/cmucreatelab/visualization/airnow/AirNowDevices.js"></script>
    <script language="JavaScript" type="text/javascript">
 
       var METADATA_URL = "data/airnow_metadata.json";
@@ -118,7 +119,8 @@
                                                     {
                                                        success : function(arrayBuffer) {
                                                           console.log("loadArrayBuffer SUCCESS!");
-                                                          dataManager = new org.cmucreatelab.visualization.DataManager(devicesMetadata, arrayBuffer);
+                                                          var devices = new org.cmucreatelab.visualization.airnow.AirNowDevices(devicesMetadata, arrayBuffer);
+                                                          dataManager = new org.cmucreatelab.visualization.DataManager(devices);
 
                                                           // now that all the data is loaded, go ahead and initialize the page
                                                           initialize();
@@ -213,9 +215,9 @@
       }
 
       function initializeMarkers() {
-         dataManager.forEachDevice(function(device) {
+         dataManager.forEachDevice(function(name, device) {
             var latLong = new google.maps.LatLng(device['latitude'], device['longitude'])
-            addMarker(device['name'], latLong, true)
+            addMarker(name, latLong, true)
          });
 
          // set initial cursor to the midpoint of the available data--this will trigger the data change event,
@@ -395,13 +397,14 @@
          var yAxisElementId = getYAxisElementId(id);
          if (val) {
             $("#" + yAxisElementId + "_valueLabelText").show().html(val);
-            $("#" + yAxisElementId + "_valueLabelColor").show().css('background-color', getParticleConcentrationIndex(val)['color']);
+            $("#" + yAxisElementId + "_valueLabelColor").show().css('background-color', getColorForValue(val));
          }
          else {
             $("#" + yAxisElementId + "_valueLabelText").hide();
             $("#" + yAxisElementId + "_valueLabelColor").hide();
          }
       }
+
       function displayTimeForDataPoint(val) {
          $("#timeLabel").html(val ? moment.unix(val['date']).format(TIMESTAMP_FORMAT) : "");
       }

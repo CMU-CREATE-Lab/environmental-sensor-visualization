@@ -122,11 +122,21 @@ if (!window['$']) {
          return null;
       };
 
+      this.forEachPlot = function(callback) {
+         if (typeof callback === 'function') {
+            for (var plotId in plotsAndYAxes) {
+               var plot = plotsAndYAxes[plotId]['plot'];
+               var yAxis = plotsAndYAxes[plotId]['yAxis'];
+               callback(plot, yAxis);
+            }
+         }
+      };
+
       this.updateYAxesSizes = function() {
          for (var plotId in plotsAndYAxes) {
             var yAxisElementId = plotsAndYAxes[plotId]['yAxisElementId']
             var yAxisElement = $("#" + yAxisElementId);
-            plotsAndYAxes[plotId]['yAxis'].setSize(yAxisElement.width(), yAxisElement.height(), SequenceNumber.getNext())
+            plotsAndYAxes[plotId]['yAxis'].setSize(yAxisElement.width(), yAxisElement.height(), SequenceNumber.getNext());
          }
       };
 

@@ -72,19 +72,19 @@ body {
 }
 
 .axisCell {
-   width: 50px;
+   width: 47px;
    height: 250px;
 }
 
 .yAxisContainer {
-   width: 50px;
+   width: 47px;
    height: 250px;
    border: 1px solid black;
    border-left-width: 0;
 }
 
 .yAxis {
-   width: 50px;
+   width: 47px;
    height: 250px;
 }
 

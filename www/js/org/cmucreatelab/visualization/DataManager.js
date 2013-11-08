@@ -1,6 +1,7 @@
 //======================================================================================================================
 // A data manager for preloaded, interval data.  We define "interval data" as data that is reported at fixed, known
-// interval between reports (e.g. a Speck sensor configured to record samples every 5 seconds).
+// interval between reports (e.g. a Speck sensor configured to record samples every 5 seconds).  The DataManager expects
+// to be given an object which implements the methods specified by org.cmucreatelab.visualization.Devices.
 //
 // Dependencies:
 // * Google Maps API
@@ -53,100 +54,11 @@ else {
 // CODE
 //======================================================================================================================
 (function() {
-   org.cmucreatelab.visualization.DataManager = function(metadata, dataArrayBuffer) {
-
-      var FIELD_COMPARATOR = function(fieldName) {
-         return function(a, b) {
-            if (a[fieldName] < b[fieldName]) {
-               return -1;
-            }
-            if (a[fieldName] > b[fieldName]) {
-               return 1;
-            }
-            return 0;
-         }
-      };
-
-      var NAME_COMPARATOR = FIELD_COMPARATOR('name')
-
-      var DEVICE_FIELD_COMPARATOR = function(fieldName) {
-         return function(a, b) {
-            if (a[fieldName] < b[fieldName]) {
-               return -1;
-            }
-            if (a[fieldName] > b[fieldName]) {
-               return 1;
-            }
-
-            // TODO: Dunno about this!
-            if (typeof b['name'] === 'undefined') {
-               return 1;
-            }
-            return NAME_COMPARATOR(a, b);
-         }
-      };
-
-      var LATITUDE_COMPARATOR = DEVICE_FIELD_COMPARATOR('latitude');
-      var LONGITUDE_COMPARATOR = DEVICE_FIELD_COMPARATOR('longitude');
-
-      var globalMinTime = new Date().getTime() / 1000;
-      var globalMaxTime = 0;
-
-      var devicesByName = {};
+   org.cmucreatelab.visualization.DataManager = function(devices) {
 
       var currentLatLongBounds = null;
       var currentTimeRange = null;              // stores both the current time range and the cursor's position
       var dataChangeListeners = [];
-
-      // The "constructor"
-      (function() {
-         var dataView = new DataView(dataArrayBuffer);
-         var recordSize = Int32Array.BYTES_PER_ELEMENT + Int16Array.BYTES_PER_ELEMENT;
-         console.log("dataView size (bytes): " + dataView.byteLength);
-         console.log("record size (bytes):   " + recordSize);
-         console.log("num data samples:      " + (dataView.byteLength / recordSize));
-
-         //--------------------------------------
-
-         // First compute the global min and max times and populate the devicesByName map.
-         var numDevices = 0;
-         for (var i = 0; i < metadata['devices'].length; i++) {
-            var device = metadata['devices'][i];
-            if (device['numRecords'] > 0) {
-               globalMinTime = Math.min(globalMinTime, device['minTime']);
-               globalMaxTime = Math.max(globalMaxTime, device['maxTime']);
-               devicesByName[device['name']] = device;
-               numDevices++;
-            }
-         }
-         console.log("numDevices:      " + numDevices);
-         console.log("global min time: " + globalMinTime);
-         console.log("global max time: " + globalMaxTime);
-
-         for (var deviceName in devicesByName) {
-            var device = devicesByName[deviceName];
-            //console.log("Device:" + device['name']);
-            device['times'] = new Int32Array(device['numRecords']);
-            device['values'] = new Float32Array(device['numRecords']);
-            globalMinTime = Math.min(globalMinTime, device['minTime']);
-            globalMaxTime = Math.max(globalMaxTime, device['maxTime']);
-            var idx = 0;
-            var startingByte = device['recordOffset'] * recordSize;
-            var endingByte = startingByte + (device['numRecords'] * recordSize);
-            //console.log("Bytes [" + startingByte + "] - [" + endingByte + "]");
-            for (var j = startingByte; j < endingByte; j += recordSize) {
-               device['times'][idx] = dataView.getInt32(j);
-
-               // Get the value, but divide it by 10 because the server has multiplied all
-               // values by 10 and saved as shorts in order to save space in the binary file.
-               // So, we need to convert back to the actual value here.
-               device['values'][idx] = dataView.getInt16(j + Int32Array.BYTES_PER_ELEMENT) / 10.0;
-               idx++;
-            }
-         }
-
-         console.log("Preload complete!");
-      })();
 
       this.addDataChangeListener = function(listener) {
          if (typeof listener === 'function') {
@@ -155,7 +67,7 @@ else {
       }
 
       this.getGlobalTimeRange = function() {
-         return {min : globalMinTime, max : globalMaxTime};
+         return devices.getGlobalTimeRange();
       }
 
       this.setLatLongBounds = function(latLongBounds) {
@@ -191,15 +103,11 @@ else {
       };
 
       this.forEachDevice = function(callback) {
-         if (typeof callback === 'function') {
-            for (var name in devicesByName) {
-               callback(devicesByName[name]);
-            }
-         }
+         devices.forEach(callback);
       };
 
       this.findByName = function(name) {
-         return devicesByName[name];
+         return devices.findByName(name);
       }
 
       this.getChannelDatasource = function(name) {
@@ -216,14 +124,14 @@ else {
                "type" : "value"
             };
 
-            var device = devicesByName[name];
+            var device = devices.findByName(name);
             var t = offsetTimeInSecs;
             var previousClampedTime = null;
             var previousClampedValue = null;
             for (var i = 0; i < 512; i++) {
-               var clampedTime = clampTimeToInterval(device, t);
+               var clampedTime = devices.clampTimeToInterval(device, t);
                if (clampedTime != previousClampedTime) {
-                  var value = getValueAtTime(device, clampedTime);
+                  var value = devices.getValueAtTime(device, clampedTime);
                   if (value != null) {
                      json['data'].push([clampedTime, value, 0, 0])
                   }
@@ -237,22 +145,12 @@ else {
          };
       }
 
-      var clampTimeToInterval = function(device, t) {
-         return t - (t % device['valueInterval'])
-      }
-
-      var getValueAtTime = function(device, timeInSecs) {
-         var valueIndex = org.cmucreatelab.util.Arrays.binarySearch(device['times'], clampTimeToInterval(device, timeInSecs), org.cmucreatelab.util.Arrays.NUMERIC_COMPARATOR);
-         return (valueIndex < 0) ? null : device['values'][valueIndex];
-      };
-
       var createDataChangeEvent = function() {
          // TODO: improve this by only including devices whose clamped time has actually changed
          var values = {};
-         for (var name in devicesByName) {
-            var device = devicesByName[name];
-            values[device['name']] = getValueAtTime(device, currentTimeRange['cursorPosition']);
-         }
+         devices.forEach(function(name, device) {
+            values[name] = devices.getValueAtTime(device, currentTimeRange['cursorPosition']);
+         });
 
          return values;
       }

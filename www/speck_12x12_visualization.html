@@ -19,12 +19,12 @@
 
       .gridCell {
          display: table-cell;
-         width: 40px;
-         height: 40px;
-         min-width: 40px;
-         min-height: 40px;
-         max-width: 40px;
-         max-height: 40px;
+         width: 25px;
+         height: 25px;
+         min-width: 25px;
+         min-height: 25px;
+         max-width: 25px;
+         max-height: 25px;
          border: 1px solid rgba(0, 0, 0, 0.5);
          cursor: pointer;
       }
@@ -40,6 +40,8 @@
    <script src="lib/commons-javascript/org/cmucreatelab/util/Http.js"></script>
    <script src="js/org/bodytrack/grapher/gwt/grapher2.nocache.js"></script>
    <script src="js/org/bodytrack/grapher/MultiplotGrapher.js"></script>
+   <script src="js/org/cmucreatelab/visualization/DataManager.js"></script>
+   <script src="js/org/cmucreatelab/visualization/speck/SpeckDevices.js"></script>
    <script language="JavaScript" type="text/javascript">
 
       var NUM_ROWS = 12;
@@ -50,7 +52,14 @@
 
       var TIMESTAMP_FORMAT = "YYYY-MM-DD HH:mm:ss";
 
+      var MIN_PARTICLES = 0;
+      var MAX_PARTICLES = 5000;
+      var HSL_RED = 0;
+      var HSL_GREEN = 120;
+
       var deviceNameGrid = [];
+
+      var dataManager = null;
 
       var channelInfoTemplate = null;
       var yAxisTemplate = null;
@@ -62,8 +71,8 @@
 
       var currentlySelectedCells = {};
       var numCurrentlySelectedCells = 0;
-      var MAX_NUM_SELECTED_CELLS = 5;
-      var availablePlotColors = ["#990000", "#009900", "#000099", "#999900", "#6600ff"];
+      var availablePlotColors = ["#990000", "#009900", "#000099", "#999900", "#990099", "#999999", "#009999", "#6600ff", "#ff0066"];
+      var MAX_NUM_SELECTED_CELLS = availablePlotColors.length;
       var usedPlotColorsByDeviceId = {};
 
       var globalTimeRange = null;
@@ -112,8 +121,8 @@
                                                     {
                                                        success : function(arrayBuffer) {
                                                           console.log("loadArrayBuffer SUCCESS!");
-                                                          // TODO
-                                                          // dataManager = new org.cmucreatelab.visualization.DataManager(devicesMetadata, arrayBuffer);
+                                                          var devices = new org.cmucreatelab.visualization.speck.SpeckDevices(devicesMetadata, arrayBuffer);
+                                                          dataManager = new org.cmucreatelab.visualization.DataManager(devices);
 
                                                           // now that all the data is loaded, go ahead and initialize the page
                                                           initialize();
@@ -137,33 +146,37 @@
          yAxisColorTemplate = Handlebars.compile($("#y_axis_color_template").html());
          yAxisInfoTemplate = Handlebars.compile($("#y_axis_info_template").html());
 
-         // create the legend
-         // TODO
-
          // configure the DataManager
-         // TODO
-         //dataManager.addDataChangeListener(function(valuesMap) {
-         //   $.each(valuesMap, function(name, value) {
-         //   });
-         //});
+         dataManager.addDataChangeListener(function(valuesMap) {
+            $.each(valuesMap, function(name, value) {
+               $("#" + name).css("background-color", (value === null) ? "white" : getColorForValue(value));
+            });
+         });
 
          // initialize the DateAxis, Grapher, and PlotContainer
-         // TODO globalTimeRange = dataManager.getGlobalTimeRange();
-         globalTimeRange = {min : 1383316440, max : 1383320580};
+         globalTimeRange = dataManager.getGlobalTimeRange();
          dateAxis = new DateAxis("dateAxis", "horizontal", {"min" : globalTimeRange['min'], "max" : globalTimeRange['max']});
-         dateAxis.setCursorPosition(globalTimeRange['min']);
          dateAxis.addAxisChangeListener(function(cursorChangeEvent) {
             // set the animation time here so that the user can click the plot to affect the animation playback position
             t = cursorChangeEvent['cursorPosition'];
             displayAnimationTime(t);
 
-            // TODO notify the data manager of the axis change
-            //dataManager.setTimeRange({
-            //                            "min" : cursorChangeEvent['min'],
-            //                            "max" : cursorChangeEvent['max'],
-            //                            "cursorPosition" : cursorChangeEvent['cursorPosition']
-            //                         });
+            // notify the data manager of the axis change
+            dataManager.setTimeRange({
+                                        "min" : cursorChangeEvent['min'],
+                                        "max" : cursorChangeEvent['max'],
+                                        "cursorPosition" : cursorChangeEvent['cursorPosition']
+                                     });
+
+            // auto-scale the y-axes
+            // TODO
+            //grapher.forEachPlot(function(plot, yAxis) {
+            //   var stats = plot.getStatistics(cursorChangeEvent['min'],cursorChangeEvent['max']);
+            //   yAxis.setRange(stats['y_min'], stats['y_max']);
+            //});
+
          });
+
          grapher = new org.bodytrack.grapher.MultiplotGrapher(dateAxis);
          plotContainer = new PlotContainer("pc1", false, []);
 
@@ -172,6 +185,8 @@
 
          // set initial sizes
          setSizes();
+
+         dateAxis.setCursorPosition(globalTimeRange['min']);
 
          // set up window resize handler
          $(window).resize(setSizes);
@@ -189,10 +204,7 @@
 
             for (var colNum = 0; colNum < NUM_COLS; colNum++) {
                var id = deviceNameGrid[rowNum][colNum];
-               var cell = $(gridCellTemplate({
-                                                id : id,
-                                                content : rowNum + ',' + colNum
-                                             }));
+               var cell = $(gridCellTemplate({ id : id, prettyName : dataManager.findByName(id)['prettyName'] }));
                cell.mouseenter(function() {
                   $(this).addClass("cellHighlight")
                });
@@ -200,8 +212,6 @@
                   $(this).removeClass("cellHighlight")
                });
                cell.click(function() {
-                  console.log("Clicked on " + this.id);
-
                   // if the selected cell is already selected, then remove it
                   if (currentlySelectedCells.hasOwnProperty(this.id)) {
                      setCellSelected(this.id, currentlySelectedCells[this.id], false);
@@ -221,7 +231,7 @@
       }
 
       function setCellSelected(id, cell, isSelected) {
-         cell.css("outline", isSelected ? "2px solid blue" : "none")
+         cell.css("outline", isSelected ? "2px solid black" : "none")
 
          if (isSelected) {
             currentlySelectedCells[id] = cell;
@@ -233,6 +243,16 @@
 
          // finally, add or remove the channel as appropriate
          (isSelected) ? loadChannel(id) : removeChannel(id);
+      }
+
+      function getColorForValue(value) {
+         return 'hsl(' + getColorHue(value) + ',100%,50%)';
+      }
+
+      function getColorHue(valRaw) {
+         var val = Math.min(Math.max(valRaw, MIN_PARTICLES), MAX_PARTICLES);
+         var percentage = val / MAX_PARTICLES;
+         return Math.round(HSL_GREEN - (HSL_GREEN * percentage));
       }
 
       function removeChannel(id) {
@@ -272,67 +292,85 @@
       }
 
       function loadChannel(id) {
-         //var device = dataManager.findByName(id);
-         //
-         //var yAxisElementId = getYAxisElementId(id);
-         //var plotColor = reservePlotColor(id);
-         //
-         //$("#yAxes").append(yAxisTemplate({"yAxisElementId" : yAxisElementId}));
-         //$("#yAxesColor").append(yAxisColorTemplate({"yAxisElementId" : yAxisElementId, color : plotColor}));
-         //$("#yAxesInfo").append(yAxisInfoTemplate({"yAxisElementId" : yAxisElementId}));
-         //$("#channelInfos").append(channelInfoTemplate({
-         //                                                 "yAxisElementId" : yAxisElementId,
-         //                                                 device : device,
-         //                                                 color : plotColor,
-         //                                                 minTimeFormatted : moment.unix(device['minTime']).format(TIMESTAMP_FORMAT),
-         //                                                 maxTimeFormatted : moment.unix(device['maxTime']).format(TIMESTAMP_FORMAT)
-         //                                              }));
-         //$("#" + yAxisElementId + "_channel_info_close_button").click(function() {
-         //   setCellSelected(id, currentlySelectedCells[id], false)
-         //});
-         //
-         //var channelDatasource = dataManager.getChannelDatasource(id);
-         //var channel = {
-         //   "min" : device['minValue'],
-         //   "max" : device['maxValue'],
-         //   "style" : {
-         //      "styles" : [
-         //         {"type" : "line", "lineWidth" : 1, "show" : true, color : plotColor}
-         //      ],
-         //      highlight : {
-         //         "lineWidth" : 1,
-         //         "styles" : [
-         //            {
-         //               "type" : "lollipop",
-         //               "color" : "#000000",
-         //               "radius" : 1,
-         //               "lineWidth" : 1,
-         //               "fill" : false
-         //            },
-         //            {
-         //               "show" : true,
-         //               "type" : "value",
-         //               "fillColor" : "#000000",
-         //               "marginWidth" : 10,
-         //               "font" : "7pt Helvetica,Arial,Verdana,sans-serif",
-         //               "verticalOffset" : 7,
-         //               "numberFormat" : "###,##0.0##"
-         //            }
-         //         ]
-         //      }
-         //   }
-         //};
-         //grapher.addPlot(id, channel, channelDatasource, yAxisElementId);
-         //grapher.addDataPointListener(id, displayTimeForDataPoint);
-         //grapher.addDataPointListener(id, function(val) {
-         //   displayValueForDataPoint(id, val ? val['valueString'] : null);
-         //});
-         //plotContainer.addPlot(grapher.getPlot(id));
-         //
-         //$("#grapherContainer").show();
-         //$("#channelInfosContainer").show();
-         //
-         //setSizes();
+         console.log("loadChannel(" + id + ")");
+
+         var device = dataManager.findByName(id);
+
+         var yAxisElementId = getYAxisElementId(id);
+         var plotColor = reservePlotColor(id);
+
+         $("#yAxes").append(yAxisTemplate({"yAxisElementId" : yAxisElementId}));
+         $("#yAxesColor").append(yAxisColorTemplate({"yAxisElementId" : yAxisElementId, color : plotColor}));
+         $("#yAxesInfo").append(yAxisInfoTemplate({"yAxisElementId" : yAxisElementId}));
+         $("#channelInfos").append(channelInfoTemplate({
+                                                          "yAxisElementId" : yAxisElementId,
+                                                          device : device,
+                                                          color : plotColor,
+                                                          minTimeFormatted : moment.unix(device['minTime']).format(TIMESTAMP_FORMAT),
+                                                          maxTimeFormatted : moment.unix(device['maxTime']).format(TIMESTAMP_FORMAT)
+                                                       }));
+         $("#" + yAxisElementId + "_channel_info_close_button").click(function() {
+            setCellSelected(id, currentlySelectedCells[id], false)
+         });
+
+         var channelDatasource = dataManager.getChannelDatasource(id);
+         var channel = {
+            "min" : device['minValue'],
+            "max" : device['maxValue'],
+            "style" : {
+               "styles" : [
+                  {"type" : "line", "lineWidth" : 1, "show" : true, color : plotColor}
+               ],
+               highlight : {
+                  "lineWidth" : 1,
+                  "styles" : [
+                     {
+                        "type" : "lollipop",
+                        "color" : "#000000",
+                        "radius" : 1,
+                        "lineWidth" : 1,
+                        "fill" : false
+                     },
+                     {
+                        "show" : true,
+                        "type" : "value",
+                        "fillColor" : "#000000",
+                        "marginWidth" : 10,
+                        "font" : "7pt Helvetica,Arial,Verdana,sans-serif",
+                        "verticalOffset" : 7,
+                        "numberFormat" : "###,##0"
+                     }
+                  ]
+               }
+            }
+         };
+         grapher.addPlot(id, channel, channelDatasource, yAxisElementId);
+         grapher.addDataPointListener(id, displayTimeForDataPoint);
+         grapher.addDataPointListener(id, function(val) {
+            displayValueForDataPoint(id, val ? val['value'] : null);
+         });
+         plotContainer.addPlot(grapher.getPlot(id));
+
+         $("#grapherContainer").show();
+         $("#channelInfosContainer").show();
+
+         setSizes();
+      }
+
+      function displayValueForDataPoint(id, val) {
+         var yAxisElementId = getYAxisElementId(id);
+         if (val) {
+            $("#" + yAxisElementId + "_valueLabelText").show().html(val);
+            $("#" + yAxisElementId + "_valueLabelColor").show().css('background-color', getColorForValue(val));
+         }
+         else {
+            $("#" + yAxisElementId + "_valueLabelText").hide();
+            $("#" + yAxisElementId + "_valueLabelColor").hide();
+         }
+      }
+
+      function displayTimeForDataPoint(val) {
+         $("#timeLabel").html(val ? moment.unix(val['date']).format(TIMESTAMP_FORMAT) : "");
       }
 
       function displayAnimationTime(val) {
@@ -393,6 +431,21 @@
          }
       }
 
+      function unifyYAxes() {
+         var min = Number.MAX_VALUE;
+         var max = Number.MIN_VALUE;
+         grapher.forEachPlot(function(plot) {
+            var stats = plot.getStatistics(dateAxis.getMin(), dateAxis.getMax());
+            min = Math.min(min, stats['y_min']);
+            max = Math.max(max, stats['y_max']);
+         });
+
+         grapher.forEachPlot(function(plot, yAxis) {
+            yAxis.setRange(min, max);
+         });
+
+      }
+
    </script>
 
    <script id="grid_row_template" type="text/x-handlebars-template">
@@ -400,7 +453,7 @@
    </script>
 
    <script id="grid_cell_template" type="text/x-handlebars-template">
-      <div id="{{id}}" class="gridCell">{{content}}</div>
+      <div id="{{id}}" class="gridCell" title="Speck {{prettyName}}"></div>
    </script>
 
    <script id="y_axis_template" type="text/x-handlebars-template">
@@ -436,29 +489,34 @@
       <div id="{{yAxisElementId}}_channel_info_container" class="channelInfo">
          <div class="yAxisColor" style="background-color:{{color}};border-right:none"></div>
          <div id="{{yAxisElementId}}_channel_info_close_button" class="closeButton" style="float:right;margin-right:3px"></div>
-         <div class="deviceName"><b>{{device.name}}</b></div>
-         <table border="0" cellpadding="0" cellspacing="0">
-            <tr>
-               <td class="channelInfoLabel">Start Time:</td>
-               <td>&nbsp;</td>
-               <td align="right"><a href="#" onclick="jumpToTime({{device.minTime}}); return false;">{{minTimeFormatted}}</a></td>
-            </tr>
-            <tr>
-               <td class="channelInfoLabel">End Time:</td>
-               <td>&nbsp;</td>
-               <td align="right"><a href="#" onclick="jumpToTime({{device.maxTime}}); return false;">{{maxTimeFormatted}}</a></td>
-            </tr>
-            <tr>
-               <td class="channelInfoLabel">Max Value:</td>
-               <td>&nbsp;</td>
-               <td align="right"><a href="#" onclick="jumpToTime({{device.maxValueTime}}); return false;">{{device.maxValue}} &#181;g/m<sup>3</sup></a></td>
-            </tr>
-            <tr>
-               <td class="channelInfoLabel">Min Value:</td>
-               <td>&nbsp;</td>
-               <td align="right"><a href="#" onclick="jumpToTime({{device.minValueTime}}); return false;">{{device.minValue}} &#181;g/m<sup>3</sup></a></td>
-            </tr>
-         </table>
+         <div class="deviceName" style="margin-left:3px"><b>Speck {{device.prettyName}}</b></div>
+         <div style="padding:3px">
+
+            <table border="0" cellpadding="0" cellspacing="0">
+               <!--
+               <tr>
+                  <td class="channelInfoLabel">Start:</td>
+                  <td>&nbsp;</td>
+                  <td align="right"><a href="#" onclick="jumpToTime({{device.minTime}}); return false;">{{minTimeFormatted}}</a></td>
+               </tr>
+               <tr>
+                  <td class="channelInfoLabel">End:</td>
+                  <td>&nbsp;</td>
+                  <td align="right"><a href="#" onclick="jumpToTime({{device.maxTime}}); return false;">{{maxTimeFormatted}}</a></td>
+               </tr>
+               -->
+               <tr>
+                  <td class="channelInfoLabel">Max:</td>
+                  <td>&nbsp;</td>
+                  <td align="right"><a href="#" onclick="jumpToTime({{device.maxValueTime}}); return false;">{{device.maxValue}}</a></td>
+               </tr>
+               <tr>
+                  <td class="channelInfoLabel">Min:</td>
+                  <td>&nbsp;</td>
+                  <td align="right"><a href="#" onclick="jumpToTime({{device.minValueTime}}); return false;">{{device.minValue}}</a></td>
+               </tr>
+            </table>
+         </div>
       </div>
    </script>
 </head>
@@ -473,11 +531,7 @@
                <div id="gridArea"></div>
             </td>
             <td id="legend">
-               <table id="legendTable" border="0" cellpadding="3" cellspacing="0" style="margin-left: 5px">
-                  <tr>
-                     <td colspan="3" align="center"><b>Legend</b></td>
-                  </tr>
-               </table>
+               <!-- Legend here? -->
             </td>
          </tr>
          <tr>
@@ -548,5 +602,6 @@
       </table>
    </div>
 </div>
+<input id="unifyYAxesButton" type="button" onclick="unifyYAxes()" value="Unify Y Axes">
 </body>
 </html>
