@@ -378,7 +378,8 @@
       }
 
       function setSizes() {
-         var plotContainerWidth = $(window).width() - 20 - Math.max($("#yAxesTable").width(), $("#axisControls").width()) - 2;
+         var axisControlsWidth = $("#axisControls").is(":visible") ? $("#axisControls").width() : 0;
+         var plotContainerWidth = $(window).width() - 20 - Math.max($("#yAxesTable").width(), axisControlsWidth) - 2;
          var plotContainerHeight = $("#column0").height() - 2;
 
          // resize date axis, plot container, and y axes
