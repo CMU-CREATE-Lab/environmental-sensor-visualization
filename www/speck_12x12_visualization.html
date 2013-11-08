@@ -28,10 +28,6 @@
          border: 1px solid rgba(0, 0, 0, 0.5);
          cursor: pointer;
       }
-
-      #gridArea {
-         width: auto;
-      }
    </style>
    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
    <script src="lib/handlebars.js"></script>
@@ -51,6 +47,7 @@
       var DATA_URL = "data/speck_12x12_data.bin";
 
       var TIMESTAMP_FORMAT = "YYYY-MM-DD HH:mm:ss";
+      var TIMESTAMP_FORMAT_SHORT = "HH:mm:ss";
 
       var MIN_PARTICLES = 0;
       var MAX_PARTICLES = 5000;
@@ -79,6 +76,8 @@
       var isPlaying = false;
       var timeoutHandle = null;
       var t = null;
+
+      var isAutoScaleOn = false;
 
       window.grapherLoad = loadData;
 
@@ -169,12 +168,9 @@
                                      });
 
             // auto-scale the y-axes
-            // TODO
-            //grapher.forEachPlot(function(plot, yAxis) {
-            //   var stats = plot.getStatistics(cursorChangeEvent['min'],cursorChangeEvent['max']);
-            //   yAxis.setRange(stats['y_min'], stats['y_max']);
-            //});
-
+            if (isAutoScaleOn) {
+               autoScaleYAxes();
+            }
          });
 
          grapher = new org.bodytrack.grapher.MultiplotGrapher(dateAxis);
@@ -183,10 +179,12 @@
          // show the grapher area
          $("#grapher_area").show();
 
-         // set initial sizes
          setSizes();
 
          dateAxis.setCursorPosition(globalTimeRange['min']);
+
+         // call setSizes() again to fix the layout
+         setSizes();
 
          // set up window resize handler
          $(window).resize(setSizes);
@@ -270,6 +268,7 @@
          if (numCurrentlySelectedCells <= 0) {
             $("#grapherContainer").hide();
             $("#channelInfosContainer").hide();
+            $("#axisControls").hide();
          }
          setSizes();
       }
@@ -306,8 +305,8 @@
                                                           "yAxisElementId" : yAxisElementId,
                                                           device : device,
                                                           color : plotColor,
-                                                          minTimeFormatted : moment.unix(device['minTime']).format(TIMESTAMP_FORMAT),
-                                                          maxTimeFormatted : moment.unix(device['maxTime']).format(TIMESTAMP_FORMAT)
+                                                          minValueTimeFormatted : moment.unix(device['minValueTime']).format(TIMESTAMP_FORMAT_SHORT),
+                                                          maxValueTimeFormatted : moment.unix(device['maxValueTime']).format(TIMESTAMP_FORMAT_SHORT)
                                                        }));
          $("#" + yAxisElementId + "_channel_info_close_button").click(function() {
             setCellSelected(id, currentlySelectedCells[id], false)
@@ -353,6 +352,7 @@
 
          $("#grapherContainer").show();
          $("#channelInfosContainer").show();
+         $("#axisControls").show();
 
          setSizes();
       }
@@ -378,14 +378,14 @@
       }
 
       function setSizes() {
-         var plotContainerWidth = $(window).width() - 20 - Math.max($("#yAxesCell").width(), $("#legend").width()) - 2;
+         var plotContainerWidth = $(window).width() - 20 - Math.max($("#yAxesTable").width(), $("#axisControls").width()) - 2;
          var plotContainerHeight = $("#column0").height() - 2;
 
          // resize date axis, plot container, and y axes
          dateAxis.setSize(plotContainerWidth, $("#dateAxis").height(), SequenceNumber.getNext());
          plotContainer.setSize(plotContainerWidth, plotContainerHeight, SequenceNumber.getNext());
          grapher.updateYAxesSizes();
-         $(".channelInfo").width((plotContainerWidth) / MAX_NUM_SELECTED_CELLS);
+         $(".channelInfo").width(plotContainerWidth / MAX_NUM_SELECTED_CELLS);
       }
 
       function jumpToTime(time) {
@@ -431,6 +431,10 @@
          }
       }
 
+      function resetDateAxis() {
+         dateAxis.setRange(globalTimeRange['min'], globalTimeRange['max']);
+      }
+
       function unifyYAxes() {
          var min = Number.MAX_VALUE;
          var max = Number.MIN_VALUE;
@@ -440,12 +444,49 @@
             max = Math.max(max, stats['y_max']);
          });
 
-         grapher.forEachPlot(function(plot, yAxis) {
-            yAxis.setRange(min, max);
-         });
+         var paddedRange = paddedYAxisRange(min, max);
 
+         grapher.forEachPlot(function(plot, yAxis) {
+            yAxis.setRange(paddedRange['min'], paddedRange['max']);
+         });
       }
 
+      function autoScaleYAxes() {
+         grapher.forEachPlot(function(plot, yAxis) {
+            var stats = plot.getStatistics(dateAxis.getMin(), dateAxis.getMax());
+            var paddedRange = paddedYAxisRange(stats['y_min'], stats['y_max']);
+            yAxis.setRange(paddedRange['min'], paddedRange['max']);
+         });
+      }
+
+      function autoScaleLockChange() {
+         isAutoScaleOn = $("#autoScaleLockCheckbox").is(":checked");
+         if (isAutoScaleOn) {
+            $("#autoScaleYAxesButton").attr("disabled", "disabled");
+         }
+         else {
+            $("#autoScaleYAxesButton").removeAttr("disabled");
+         }
+      }
+
+      function paddedYAxisRange(min, max) {
+         var yDiff = max - min;
+         var padding = 0.5;
+         if (yDiff < 1e-10) {
+            padding = 0.5;
+         }
+         else {
+            padding = 0.05 * yDiff;
+         }
+         return {min : min - padding, max : max + padding}
+      }
+
+      function removeAllSelections() {
+         for (var id in currentlySelectedCells) {
+            var cell = currentlySelectedCells[id];
+            setCellSelected(id, cell, false);
+         }
+      }
    </script>
 
    <script id="grid_row_template" type="text/x-handlebars-template">
@@ -491,29 +532,19 @@
          <div id="{{yAxisElementId}}_channel_info_close_button" class="closeButton" style="float:right;margin-right:3px"></div>
          <div class="deviceName" style="margin-left:3px"><b>Speck {{device.prettyName}}</b></div>
          <div style="padding:3px">
-
-            <table border="0" cellpadding="0" cellspacing="0">
-               <!--
+            <table border="0" cellpadding="0" cellspacing="0" align="center">
                <tr>
-                  <td class="channelInfoLabel">Start:</td>
-                  <td>&nbsp;</td>
-                  <td align="right"><a href="#" onclick="jumpToTime({{device.minTime}}); return false;">{{minTimeFormatted}}</a></td>
+                  <th class="channelInfoLabel">Min</th>
+                  <th rowspan="3">&nbsp;&nbsp;&nbsp;</th>
+                  <th class="channelInfoLabel">Max</th>
                </tr>
-               <tr>
-                  <td class="channelInfoLabel">End:</td>
-                  <td>&nbsp;</td>
-                  <td align="right"><a href="#" onclick="jumpToTime({{device.maxTime}}); return false;">{{maxTimeFormatted}}</a></td>
+               <tr align="center">
+                  <td><a href="#" onclick="jumpToTime({{device.minValueTime}}); return false;">{{device.minValue}}</a></td>
+                  <td><a href="#" onclick="jumpToTime({{device.maxValueTime}}); return false;">{{device.maxValue}}</a></td>
                </tr>
-               -->
-               <tr>
-                  <td class="channelInfoLabel">Max:</td>
-                  <td>&nbsp;</td>
-                  <td align="right"><a href="#" onclick="jumpToTime({{device.maxValueTime}}); return false;">{{device.maxValue}}</a></td>
-               </tr>
-               <tr>
-                  <td class="channelInfoLabel">Min:</td>
-                  <td>&nbsp;</td>
-                  <td align="right"><a href="#" onclick="jumpToTime({{device.minValueTime}}); return false;">{{device.minValue}}</a></td>
+               <tr align="center">
+                  <td><a href="#" onclick="jumpToTime({{device.minValueTime}}); return false;">{{minValueTimeFormatted}}</a></td>
+                  <td><a href="#" onclick="jumpToTime({{device.maxValueTime}}); return false;">{{maxValueTimeFormatted}}</a></td>
                </tr>
             </table>
          </div>
@@ -525,23 +556,13 @@
 <div id="loading_panel">Loading...</div>
 <div id="main_panel">
    <div id="grapher_area" class="textSelectionDisabled">
-      <table id="grapher" border="0" cellpadding="0" cellspacing="0">
-         <tr valign="top">
+      <table border="0" cellpadding="0" cellspacing="0">
+         <tr valign="bottom">
             <td>
                <div id="gridArea"></div>
             </td>
-            <td id="legend">
-               <!-- Legend here? -->
-            </td>
-         </tr>
-         <tr>
-            <td width="400">
-               <div id="dateAxisContainer">
-                  <div id="dateAxis"></div>
-               </div>
-            </td>
             <td>
-               <table border="0" cellpadding="0" cellspacing="0" align="center">
+               <table border="0" cellpadding="0" cellspacing="0" align="center" style="margin:5px">
                   <tr>
                      <td><input id="playButton" type="button" onclick="play()" value="Play" style="margin-right:15px"></td>
                      <td>step</td>
@@ -570,38 +591,63 @@
                      <td>second</td>
                   </tr>
                   <tr>
-                     <td colspan="6">
-                        <div id="animationTimeLabel"></div>
+                     <td colspan="3">
+                        <div id="animationTimeLabel" style="text-align: left; margin-left:3px"></div>
+                     </td>
+                     <td colspan="3" align="right">
+                        <input id="resetDateAxisButton" type="button" onclick="resetDateAxis()" value="Reset Time Range"><br>
                      </td>
                   </tr>
                </table>
-
+            </td>
+         </tr>
+      </table>
+      <table border="0" cellpadding="0" cellspacing="0">
+         <tr>
+            <td width="400">
+               <div id="dateAxisContainer">
+                  <div id="dateAxis"></div>
+               </div>
+            </td>
+            <td>
+               <table id="axisControls" border="0" cellpadding="0" cellspacing="0" style="display:none;margin-left:5px">
+                  <tr>
+                     <td>
+                        <input id="unifyYAxesButton" type="button" onclick="unifyYAxes()" value="Unify Y-Axis Ranges">
+                     </td>
+                  </tr>
+                  <tr>
+                     <td>
+                        <input id="autoScaleYAxesButton" type="button" onclick="autoScaleYAxes()" value="Auto Scale">
+                        <input id="autoScaleLockCheckbox" name="autoScaleLockCheckbox" type="checkbox" onchange="autoScaleLockChange()" value="true">Lock
+                     </td>
+                  </tr>
+               </table>
             </td>
          </tr>
          <tr id="grapherContainer" style="display:none">
-            <td width="400" id="column0">
+            <td id="column0">
                <div id="plotContainer1" class="plotContainer">
                   <div id="pc1" class="plot"></div>
                </div>
             </td>
-            <td rowspan="2" valign="top" id="yAxesCell">
-               <table border="0" cellpadding="0" cellspacing="0">
+            <td rowspan="2" valign="top">
+               <table id="yAxesTable" border="0" cellpadding="0" cellspacing="0">
                   <tr id="yAxes"></tr>
                   <tr id="yAxesColor"></tr>
                   <tr id="yAxesInfo"></tr>
                </table>
-               <div id="timeLabel"></div>
+               <div id="timeLabel" style="text-align: center"></div>
             </td>
          </tr>
          <tr id="channelInfosContainer" valign="top" style="display:none">
             <td>
                <div id="channelInfos" style="display: table-row"></div>
+               <input id="removeAllSelectionsButton" type="button" onclick="removeAllSelections()" value="Remove All" style="margin-top:5px">
             </td>
-            <td>&nbsp;</td>
          </tr>
       </table>
    </div>
 </div>
-<input id="unifyYAxesButton" type="button" onclick="unifyYAxes()" value="Unify Y Axes">
 </body>
 </html>
