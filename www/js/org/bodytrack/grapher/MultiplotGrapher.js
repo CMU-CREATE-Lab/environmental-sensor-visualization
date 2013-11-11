@@ -102,6 +102,19 @@ if (!window['$']) {
          };
       };
 
+      this.addTimespanPlot = function(plotId, channel, channelDatasource, yAxisElementId) {
+         var yAxis = createYAxis(channel, yAxisElementId);
+         var plot = new TimespanSeriesPlot(channelDatasource,
+                                           dateAxis,
+                                           yAxis,
+                                           {"style" : channel["style"], "localDisplay" : channel["time_type"] == "local"});
+         plotsAndYAxes[plotId] = {
+            plot : plot,
+            yAxis : yAxis,
+            yAxisElementId : yAxisElementId
+         };
+      };
+
       this.addDataPointListener = function(plotId, listener) {
          plotsAndYAxes[plotId]['plot'].addDataPointListener(listener);
       };

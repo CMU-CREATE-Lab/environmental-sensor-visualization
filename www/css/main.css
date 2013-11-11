@@ -103,6 +103,24 @@ body {
    height: 250px;
 }
 
+.timespanPlotContainer {
+   height: 50px;
+}
+
+.timespanPlot {
+   height: 50px;
+}
+
+.timespanYAxisContainer {
+   width: 47px;
+   height: 50px;
+}
+
+.timespanYAxis {
+   width: 47px;
+   height: 50px;
+}
+
 #valueLabel {
    width: auto;
    height: 20px;

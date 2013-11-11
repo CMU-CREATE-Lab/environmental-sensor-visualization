@@ -61,6 +61,8 @@
       var dateAxis;
       var grapher;
       var plotContainer;
+      var timespanGrapher;
+      var timespanPlotContainer;
 
       var currentlySelectedCells = {};
       var numCurrentlySelectedCells = 0;
@@ -170,7 +172,11 @@
          });
 
          grapher = new org.bodytrack.grapher.MultiplotGrapher(dateAxis);
+         timespanGrapher = new org.bodytrack.grapher.MultiplotGrapher(dateAxis);
          plotContainer = new PlotContainer("pc1", false, []);
+         timespanPlotContainer = new PlotContainer("timespanPlot", false, []);
+
+         initializeAnnotations();
 
          // show the grapher area
          $("#grapher_area").show();
@@ -232,6 +238,152 @@
          }
       }
 
+      function initializeAnnotations() {
+         var commentChannel = {
+            "min" : 0,
+            "max" : 1,
+            "time_type" : "utc",
+            "style" : {
+               "styles" : [
+                  {
+                     "type" : "lollipop",
+                     "color" : "#000000",
+                     "radius" : 1,
+                     "lineWidth" : 1,
+                     "fill" : false
+                  }
+               ],
+               "comments" : {
+                  "show" : true,
+                  "verticalMargin" : 4,
+                  "styles" : [
+                     {
+                        "type" : "point",
+                        "lineWidth" : 1,
+                        "radius" : 2,
+                        "fill" : true,
+                        "show" : true
+                     }
+                  ]
+               },
+               "highlight" : {
+                  "lineWidth" : 1,
+                  "styles" : [
+                     {
+                        "type" : "lollipop",
+                        "color" : "#000000",
+                        "radius" : 3,
+                        "lineWidth" : 3,
+                        "fill" : true
+                     }
+                  ]
+               }
+            }
+         };
+         var timespanChannel = {
+            "min" : 0,
+            "max" : 1,
+            "time_type" : "utc",
+            "style" : {
+               "timespanStyles" : {
+                  "defaultStyle" : {
+                     "borderWidth" : 2,
+                     "borderColor" : "#0000ff",
+                     "fillColor" : "#0000ff",
+                     "top" : 0,
+                     "bottom" : 1.0
+                  },
+                  "values" : {
+                     "people_movement" : {
+                        "borderColor" : "#0000ff",
+                        "fillColor" : "#0000ff",
+                        "top" : 0.0,
+                        "bottom" : 0.25
+                     },
+                     "particle_generator" : {
+                        "borderColor" : "#ff0000",
+                        "fillColor" : "#ff0000",
+                        "top" : 0.25,
+                        "bottom" : 0.5
+                     },
+                     "air_filter" : {
+                        "borderColor" : "#00ff00",
+                        "fillColor" : "#00ff00",
+                        "top" : 0.5,
+                        "bottom" : 0.75
+                     }
+                  }
+               }
+            }
+         };
+         var channelDatasource =
+               function(level, offset, successCallback) {
+                  var json = {
+                     "data" : [
+                        {
+                           "start" : 1383316500,
+                           "end" : 1383317160,
+                           "value" : "people_movement",
+                           "objectType" : "speck_timespan_event"
+                        },
+                        {
+                           "start" : 1383317415,
+                           "end" : 1383317750,
+                           "value" : "particle_generator",
+                           "objectType" : "speck_timespan_event"
+                        },
+                        {
+                           "start" : 1383318429,
+                           "end" : 1383319958,
+                           "value" : "air_filter",
+                           "objectType" : "speck_timespan_event"
+                        },
+                        {
+                           "start" : 1383319998,
+                           "end" : 1383320247,
+                           "value" : "particle_generator",
+                           "objectType" : "speck_timespan_event"
+                        }
+                     ], "type" : "timespan"
+                  };
+
+                  successCallback(JSON.stringify(json));
+               };
+         var commentDatasource =
+               function(level, offset, successCallback) {
+                  var json = {
+                     "fields" : ["time", "mean", "stddev", "count", "comment"],
+                     "level" : level,
+                     "offset" : offset,
+                     "sample_width" : Math.pow(2, level),
+                     "data" : [
+                        [1383316500, 1, 0, 1, "Left the room to let things settle down"],
+                        [1383317160, 1, 0, 1, "Re-entered the room"],
+                        [1383317415, 0.75, 0, 1, "Started vacuum"],
+                        [1383317750, 0.75, 0, 1, "Stopped vacuum"],
+                        [1383318429, 0.5, 0, 1, "Turned on air filter"],
+                        [1383319958, 0.5, 0, 1, "Turned off air filter"],
+                        [1383319998, 0.75, 0, 1, "Began lighting candles"],
+                        [1383320101, 0.75, 0, 1, "Finished lighting candles"],
+                        [1383320247, 0.75, 0, 1, "Blew out candles"]
+                     ],
+                     "type" : "value"
+                  };
+
+                  successCallback(JSON.stringify(json));
+               };
+         timespanGrapher.addTimespanPlot("timespan_plot", timespanChannel, channelDatasource, "timespanYAxis");
+         timespanGrapher.addDataPointListener("timespan_plot", function(evt1, evt2) {
+            console.log("evt1: " + JSON.stringify(evt1, null, 3));
+            console.log("evt2: " + JSON.stringify(evt2, null, 3));
+         });
+         timespanPlotContainer.addPlot(timespanGrapher.getPlot("timespan_plot"));
+
+         timespanGrapher.addPlot("timespan_comment_plot", commentChannel, commentDatasource, "timespanCommentsYAxis");
+         timespanPlotContainer.addPlot(timespanGrapher.getPlot("timespan_comment_plot"));
+         setSizes();
+      }
+
       function setCellSelected(id, cell, isSelected) {
          cell.css("outline", isSelected ? "2px solid black" : "none")
 
@@ -252,7 +404,13 @@
       }
 
       function getColorHue(valRaw) {
+         // clamp the value to be within the range [MIN_PARTICLES, MAX_PARTICLES]
          var val = Math.min(Math.max(valRaw, MIN_PARTICLES), MAX_PARTICLES);
+
+         //// convert the value to a bucketed percentage in the range [0,1]
+         // var numBuckets = 10
+         //var percentage = Math.round(val / MAX_PARTICLES * numBuckets) / numBuckets;
+
          var percentage = val / MAX_PARTICLES;
          return Math.round(HSL_GREEN - (HSL_GREEN * percentage));
       }
@@ -329,11 +487,12 @@
          var channel = {
             "min" : device['minValue'],
             "max" : device['maxValue'],
+            "time_type" : "utc",
             "style" : {
                "styles" : [
                   {"type" : "line", "lineWidth" : 1, "show" : true, color : plotColor}
                ],
-               highlight : {
+               "highlight" : {
                   "lineWidth" : 1,
                   "styles" : [
                      {
@@ -371,6 +530,7 @@
       }
 
       function displayValueForDataPoint(id, val) {
+         console.log("displayValueForDataPoint(" + id + "," + val + ")");
          var yAxisElementId = getYAxisElementId(id);
          if (val) {
             $("#" + yAxisElementId + "_valueLabelText").show().html(val);
@@ -391,7 +551,7 @@
       }
 
       function setSizes() {
-         var axisControlsWidth = $("#axisControls").is(":visible") ? $("#axisControls").width() : 0;
+         var axisControlsWidth = $("#axisControls").is(":visible") ? $("#axisControls").width() : $("#timespanYAxes").width();
          var plotContainerWidth = $(window).width() - 20 - Math.max($("#yAxesTable").width(), axisControlsWidth) - 2;
          var plotContainerHeight = $("#column0").height() - 2;
 
@@ -399,6 +559,8 @@
          dateAxis.setSize(plotContainerWidth, $("#dateAxis").height(), SequenceNumber.getNext());
          plotContainer.setSize(plotContainerWidth, plotContainerHeight, SequenceNumber.getNext());
          grapher.updateYAxesSizes();
+         timespanPlotContainer.setSize(plotContainerWidth, 50, SequenceNumber.getNext());
+         timespanGrapher.updateYAxesSizes();
          $(".channelInfo").width(plotContainerWidth / MAX_NUM_SELECTED_CELLS);
       }
 
@@ -637,6 +799,30 @@
                      </td>
                   </tr>
                </table>
+            </td>
+         </tr>
+         <tr>
+            <td>
+               <div id="timespanPlotContainer" class="plotContainer timespanPlotContainer">
+                  <div id="timespanPlot" class="timespanPlot"></div>
+               </div>
+            </td>
+            <td id="timespanYAxes">
+               <table border="0" cellpadding="0" cellspacing="0">
+                  <tr>
+                     <td>
+                        <div class="yAxisContainer timespanYAxisContainer">
+                           <div id="timespanYAxis" class="yAxis timespanYAxis"></div>
+                        </div>
+                     </td>
+                     <td>
+                        <div class="yAxisContainer timespanYAxisContainer">
+                           <div id="timespanCommentsYAxis" class="yAxis timespanYAxis"></div>
+                        </div>
+                     </td>
+                  </tr>
+               </table>
+
             </td>
          </tr>
          <tr id="grapherContainer" style="display:none">
