@@ -204,10 +204,18 @@
                var id = deviceNameGrid[rowNum][colNum];
                var cell = $(gridCellTemplate({ id : id, prettyName : dataManager.findByName(id)['prettyName'] }));
                cell.mouseenter(function() {
-                  $(this).addClass("cellHighlight")
+                  $(this).css("outline", "2px solid red");
+                  $("#yAxis" + this.id + "_channel_info_container").css("outline", "2px solid red");
+
                });
                cell.mouseleave(function() {
-                  $(this).removeClass("cellHighlight")
+                  if (currentlySelectedCells.hasOwnProperty(this.id)) {
+                     $(this).css("outline", "2px solid black");
+                  } else {
+                     $(this).css("outline", "none");
+                  }
+                  //$(this).css("outline", "none");
+                  $("#yAxis" + this.id + "_channel_info_container").css("outline", "none");
                });
                cell.click(function() {
                   // if the selected cell is already selected, then remove it
@@ -301,16 +309,25 @@
          $("#yAxes").append(yAxisTemplate({"yAxisElementId" : yAxisElementId}));
          $("#yAxesColor").append(yAxisColorTemplate({"yAxisElementId" : yAxisElementId, color : plotColor}));
          $("#yAxesInfo").append(yAxisInfoTemplate({"yAxisElementId" : yAxisElementId}));
-         $("#channelInfos").append(channelInfoTemplate({
-                                                          "yAxisElementId" : yAxisElementId,
-                                                          device : device,
-                                                          color : plotColor,
-                                                          minValueTimeFormatted : moment.unix(device['minValueTime']).format(TIMESTAMP_FORMAT_SHORT),
-                                                          maxValueTimeFormatted : moment.unix(device['maxValueTime']).format(TIMESTAMP_FORMAT_SHORT)
-                                                       }));
+         var channelInfoBox = $(channelInfoTemplate({
+                                                       "yAxisElementId" : yAxisElementId,
+                                                       device : device,
+                                                       color : plotColor,
+                                                       minValueTimeFormatted : moment.unix(device['minValueTime']).format(TIMESTAMP_FORMAT_SHORT),
+                                                       maxValueTimeFormatted : moment.unix(device['maxValueTime']).format(TIMESTAMP_FORMAT_SHORT)
+                                                    }));
+         $("#channelInfos").append(channelInfoBox);
          $("#" + yAxisElementId + "_channel_info_close_button").click(function() {
             setCellSelected(id, currentlySelectedCells[id], false)
          });
+
+         channelInfoBox.mouseenter(
+               function() {
+                  $("#" + id).css('outline', '2px solid red')
+               }).mouseleave(
+               function() {
+                  $("#" + id).css('outline', '2px solid black')
+               });
 
          var channelDatasource = dataManager.getChannelDatasource(id);
          var channel = {
