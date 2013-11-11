@@ -13,10 +13,6 @@
          display: table-row;
       }
 
-      .cellHighlight {
-         outline: 2px solid red;
-      }
-
       .gridCell {
          display: table-cell;
          width: 25px;
@@ -211,10 +207,10 @@
                cell.mouseleave(function() {
                   if (currentlySelectedCells.hasOwnProperty(this.id)) {
                      $(this).css("outline", "2px solid black");
-                  } else {
+                  }
+                  else {
                      $(this).css("outline", "none");
                   }
-                  //$(this).css("outline", "none");
                   $("#yAxis" + this.id + "_channel_info_container").css("outline", "none");
                });
                cell.click(function() {
