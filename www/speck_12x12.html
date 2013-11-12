@@ -54,6 +54,10 @@
       var HSL_RED = 0;
       var HSL_GREEN = 120;
 
+      // Got these divergent palettes from http://colorbrewer2.org/
+      var DIVERGENT_PALETTE = [ "#006837", "#1A9850", "#66BD63", "#A6D96A", "#D9EF8B", "#FFFFBF", "#FEE08B", "#FDAE61", "#F46D43", "#D73027", "#A50026" ];
+      var DIVERGENT_PALETTE_COLORBLIND_SAFE = ["#313695", "#4575B4", "#74ADD1", "#ABD9E9", "#E0F3F8", "#FFFFBF", "#FEE090", "#FDAE61", "#F46D43", "#D73027", "#A50026"];
+
       var deviceNameGrid = [];
 
       var cornersMetadata = null;
@@ -428,12 +432,12 @@
 
          // Prevent changing the y axis ranges for the annotations plots
          timespanYAxis.addAxisChangeListener(function(o1) {
-            if (o1 && (o1['min'] !=timespanChannel['min'] || o1['max'] != timespanChannel['max'])) {
+            if (o1 && (o1['min'] != timespanChannel['min'] || o1['max'] != timespanChannel['max'])) {
                timespanYAxis.setRange(timespanChannel['min'], timespanChannel['max']);
             }
          });
          timespanCommentYAxis.addAxisChangeListener(function(o1) {
-            if (o1 && (o1['min'] !=commentChannel['min'] || o1['max'] != commentChannel['max'])) {
+            if (o1 && (o1['min'] != commentChannel['min'] || o1['max'] != commentChannel['max'])) {
                timespanCommentYAxis.setRange(commentChannel['min'], commentChannel['max']);
             }
          });
@@ -458,18 +462,28 @@
 
       function getColorForValue(value) {
          return 'hsl(' + getColorHue(value) + ',100%,50%)';
+         //return getColorHueDivergentPalette(value);
       }
 
       function getColorHue(valRaw) {
-         // clamp the value to be within the range [MIN_PARTICLES, MAX_PARTICLES]
-         var val = Math.min(Math.max(valRaw, MIN_PARTICLES), MAX_PARTICLES);
+         // clamp the value to be within the allowed range
+         var max = 3000;
+         var val = Math.min(Math.max(valRaw, MIN_PARTICLES), max);
 
-         //// convert the value to a bucketed percentage in the range [0,1]
-         // var numBuckets = 10
-         //var percentage = Math.round(val / MAX_PARTICLES * numBuckets) / numBuckets;
+         // convert the value to a bucketed percentage in the range [0,1]
+         //var numBuckets = 10;
+         //var percentage = Math.round(val / max * numBuckets) / numBuckets;
 
-         var percentage = val / MAX_PARTICLES;
+         var percentage = val / max;
          return Math.round(HSL_GREEN - (HSL_GREEN * percentage));
+      }
+
+      function getColorHueDivergentPalette(valRaw) {
+         // clamp the value to be within the allowed range
+         var max = MAX_PARTICLES;
+         var val = Math.min(Math.max(valRaw, MIN_PARTICLES), max);
+
+         return DIVERGENT_PALETTE[Math.floor(val / (max / DIVERGENT_PALETTE.length))];
       }
 
       function removeChannel(id) {
