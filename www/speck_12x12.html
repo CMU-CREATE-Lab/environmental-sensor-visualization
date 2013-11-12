@@ -643,7 +643,7 @@
 
       function setSizes() {
          var axisControlsWidth = $("#axisControls").is(":visible") ? $("#axisControls").width() : 0;
-         var plotContainerWidth = $(window).width() - 20 - Math.max($("#yAxesTable").width(), axisControlsWidth) - 2;
+         var plotContainerWidth = $(window).width() - 20 - Math.max($("#yAxesTableContainer").width(), axisControlsWidth) - 2;
          var plotContainerHeight = $("#column0").height() - 2;
 
          // resize date axis, plot container, and y axes
@@ -934,7 +934,7 @@
                   <div id="pc1" class="plot"></div>
                </div>
             </td>
-            <td rowspan="2" valign="top">
+            <td rowspan="2" valign="top" id="yAxesTableContainer">
                <table id="yAxesTable" border="0" cellpadding="0" cellspacing="0">
                   <tr id="yAxes"></tr>
                   <tr id="yAxesColor"></tr>
