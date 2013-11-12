@@ -421,8 +421,22 @@
          timespanPlotContainer.addPlot(timespanGrapher.getPlot("timespan_comment_plot"));
 
          // Don't want the padding, so just force the range to [min,max]
-         timespanGrapher.getYAxis("timespan_plot").setRange(timespanChannel['min'], timespanChannel['max']);
-         timespanGrapher.getYAxis("timespan_comment_plot").setRange(commentChannel['min'], commentChannel['max']);
+         var timespanYAxis = timespanGrapher.getYAxis("timespan_plot");
+         var timespanCommentYAxis = timespanGrapher.getYAxis("timespan_comment_plot");
+         timespanYAxis.setRange(timespanChannel['min'], timespanChannel['max']);
+         timespanCommentYAxis.setRange(commentChannel['min'], commentChannel['max']);
+
+         // Prevent changing the y axis ranges for the annotations plots
+         timespanYAxis.addAxisChangeListener(function(o1) {
+            if (o1 && (o1['min'] !=timespanChannel['min'] || o1['max'] != timespanChannel['max'])) {
+               timespanYAxis.setRange(timespanChannel['min'], timespanChannel['max']);
+            }
+         });
+         timespanCommentYAxis.addAxisChangeListener(function(o1) {
+            if (o1 && (o1['min'] !=commentChannel['min'] || o1['max'] != commentChannel['max'])) {
+               timespanCommentYAxis.setRange(commentChannel['min'], commentChannel['max']);
+            }
+         });
 
          setSizes();
       }
