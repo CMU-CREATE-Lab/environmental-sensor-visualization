@@ -664,7 +664,10 @@
       function play() {
          if (!isPlaying) {
             isPlaying = true;
-            t = dateAxis.getMin();
+            t = dateAxis.getCursorPosition();
+            if (t >= dateAxis.getMax()) {
+               t = dateAxis.getMin();
+            }
             $("#playButton").val("Stop");
             computeAndRenderNextGeneration();
          }
