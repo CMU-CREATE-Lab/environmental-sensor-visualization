@@ -21,8 +21,10 @@
          min-height: 25px;
          max-width: 25px;
          max-height: 25px;
+         line-height: 25px;
          border: 1px solid rgba(0, 0, 0, 0.5);
          cursor: pointer;
+         text-align: center;
       }
    </style>
    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
@@ -39,7 +41,9 @@
       var NUM_ROWS = 12;
       var NUM_COLS = 12;
 
-      var METADATA_URL = "data/speck_12x12_metadata.json";
+      // TODO: Load the 2 metadata URLs synchronously
+      var METADATA_URL_1 = "data/speck_12x12_metadata.json";
+      var METADATA_URL_2 = "data/speck_12x12_corners_metadata.json";
       var DATA_URL = "data/speck_12x12_data.bin";
 
       var TIMESTAMP_FORMAT = "YYYY-MM-DD HH:mm:ss";
@@ -52,6 +56,7 @@
 
       var deviceNameGrid = [];
 
+      var cornersMetadata = null;
       var dataManager = null;
 
       var channelInfoTemplate = null;
@@ -81,7 +86,7 @@
 
       function loadData() {
          $.ajax({
-                   url : METADATA_URL,
+                   url : METADATA_URL_1,
                    type : 'GET',
                    dataType : 'json',
                    timeout : 5000,
@@ -103,14 +108,13 @@
                          loadBinaryData(devicesMetadata);
                       }
                       else {
-                         console.log("Failed to load " + METADATA_URL);
+                         console.log("Failed to load " + METADATA_URL_1);
                       }
                    },
                    error : function() {
-                      console.log("Failed to load " + METADATA_URL);
+                      console.log("Failed to load " + METADATA_URL_1);
                    }
                 });
-
       }
 
       function loadBinaryData(devicesMetadata) {
@@ -121,14 +125,39 @@
                                                           var devices = new org.cmucreatelab.visualization.speck.SpeckDevices(devicesMetadata, arrayBuffer);
                                                           dataManager = new org.cmucreatelab.visualization.DataManager(devices);
 
-                                                          // now that all the data is loaded, go ahead and initialize the page
-                                                          initialize();
+                                                          loadCornersData();
                                                        },
                                                        failure : function(requestStatus) {
                                                           // TODO: do something better
                                                           alert("Failed to load the data from [" + DATA_URL + "] (Request Status: " + requestStatus + ")");
                                                        }
                                                     });
+      }
+
+      function loadCornersData() {
+         $.ajax({
+                   url : METADATA_URL_2,
+                   type : 'GET',
+                   dataType : 'json',
+                   timeout : 5000,
+                   cache : false,
+                   global : false,
+                   success : function(metadata) {
+                      if (metadata && metadata['devices']) {
+
+                         cornersMetadata = metadata;
+
+                         // now that all the data is loaded, go ahead and initialize the page
+                         initialize();
+                      }
+                      else {
+                         console.log("Failed to load " + METADATA_URL_2);
+                      }
+                   },
+                   error : function() {
+                      console.log("Failed to load " + METADATA_URL_2);
+                   }
+                });
       }
 
       function initialize() {
@@ -204,38 +233,47 @@
 
             for (var colNum = 0; colNum < NUM_COLS; colNum++) {
                var id = deviceNameGrid[rowNum][colNum];
-               var cell = $(gridCellTemplate({ id : id, prettyName : dataManager.findByName(id)['prettyName'] }));
-               cell.mouseenter(function() {
-                  $(this).css("outline", "2px solid red");
-                  $("#yAxis" + this.id + "_channel_info_container").css("outline", "2px solid red");
-
-               });
-               cell.mouseleave(function() {
-                  if (currentlySelectedCells.hasOwnProperty(this.id)) {
-                     $(this).css("outline", "2px solid black");
-                  }
-                  else {
-                     $(this).css("outline", "none");
-                  }
-                  $("#yAxis" + this.id + "_channel_info_container").css("outline", "none");
-               });
-               cell.click(function() {
-                  // if the selected cell is already selected, then remove it
-                  if (currentlySelectedCells.hasOwnProperty(this.id)) {
-                     setCellSelected(this.id, currentlySelectedCells[this.id], false);
-                  }
-                  else {
-                     if (numCurrentlySelectedCells < MAX_NUM_SELECTED_CELLS) {
-                        setCellSelected(this.id, $("#" + this.id), true);
-                     }
-                  }
-               });
-
+               var cell = $(gridCellTemplate({ id : id, prettyName : "Speck " + dataManager.findByName(id)['prettyName'] }));
+               createCellEventHandlers(cell);
                row.append(cell);
             }
 
             gridArea.append(row);
          }
+
+         // now set up the four corners
+         $.each(cornersMetadata['devices'], function(id) {
+            createCellEventHandlers($("#" + id));
+         });
+      }
+
+      function createCellEventHandlers(cell) {
+         cell.mouseenter(function() {
+            $(this).css("outline", "2px solid red");
+            $("#yAxis" + this.id + "_channel_info_container").css("outline", "2px solid red");
+
+         });
+         cell.mouseleave(function() {
+            if (currentlySelectedCells.hasOwnProperty(this.id)) {
+               $(this).css("outline", "2px solid black");
+            }
+            else {
+               $(this).css("outline", "none");
+            }
+            $("#yAxis" + this.id + "_channel_info_container").css("outline", "none");
+         });
+         cell.click(function() {
+            // if the selected cell is already selected, then remove it
+            if (currentlySelectedCells.hasOwnProperty(this.id)) {
+               setCellSelected(this.id, currentlySelectedCells[this.id], false);
+            }
+            else {
+               if (numCurrentlySelectedCells < MAX_NUM_SELECTED_CELLS) {
+                  setCellSelected(this.id, $("#" + this.id), true);
+               }
+            }
+         });
+
       }
 
       function initializeAnnotations() {
@@ -298,19 +336,19 @@
                         "borderColor" : "#0000ff",
                         "fillColor" : "#0000ff",
                         "top" : 0.0,
-                        "bottom" : 0.25
+                        "bottom" : 0.333333
                      },
                      "particle_generator" : {
                         "borderColor" : "#ff0000",
                         "fillColor" : "#ff0000",
-                        "top" : 0.25,
-                        "bottom" : 0.5
+                        "top" : 0.333333,
+                        "bottom" : 0.666666
                      },
                      "air_filter" : {
                         "borderColor" : "#00ff00",
                         "fillColor" : "#00ff00",
-                        "top" : 0.5,
-                        "bottom" : 0.75
+                        "top" : 0.666666,
+                        "bottom" : 1.0
                      }
                   }
                }
@@ -359,13 +397,13 @@
                      "data" : [
                         [1383316500, 1, 0, 1, "Left the room to let things settle down"],
                         [1383317160, 1, 0, 1, "Re-entered the room"],
-                        [1383317415, 0.75, 0, 1, "Started vacuum"],
-                        [1383317750, 0.75, 0, 1, "Stopped vacuum"],
-                        [1383318429, 0.5, 0, 1, "Turned on air filter"],
-                        [1383319958, 0.5, 0, 1, "Turned off air filter"],
-                        [1383319998, 0.75, 0, 1, "Began lighting candles"],
-                        [1383320101, 0.75, 0, 1, "Finished lighting candles"],
-                        [1383320247, 0.75, 0, 1, "Blew out candles"]
+                        [1383317415, 0.666666, 0, 1, "Started vacuum"],
+                        [1383317750, 0.666666, 0, 1, "Stopped vacuum"],
+                        [1383318429, 0.333333, 0, 1, "Turned on air filter"],
+                        [1383319958, 0.333333, 0, 1, "Turned off air filter"],
+                        [1383319998, 0.666666, 0, 1, "Began lighting candles"],
+                        [1383320101, 0.666666, 0, 1, "Finished lighting candles"],
+                        [1383320247, 0.666666, 0, 1, "Blew out candles"]
                      ],
                      "type" : "value"
                   };
@@ -381,6 +419,11 @@
 
          timespanGrapher.addPlot("timespan_comment_plot", commentChannel, commentDatasource, "timespanCommentsYAxis");
          timespanPlotContainer.addPlot(timespanGrapher.getPlot("timespan_comment_plot"));
+
+         // Don't want the padding, so just force the range to [min,max]
+         timespanGrapher.getYAxis("timespan_plot").setRange(timespanChannel['min'], timespanChannel['max']);
+         timespanGrapher.getYAxis("timespan_comment_plot").setRange(commentChannel['min'], commentChannel['max']);
+
          setSizes();
       }
 
@@ -455,7 +498,29 @@
       function loadChannel(id) {
          console.log("loadChannel(" + id + ")");
 
+         var isCorner = false;
          var device = dataManager.findByName(id);
+         var channelDatasource = null;
+         if (device == null) {
+            isCorner = true;
+            device = cornersMetadata['devices'][id];
+            channelDatasource =
+            function(level, offset, successCallback) {
+               var json = {
+                  "fields" : ["time", "mean", "stddev", "count"],
+                  "level" : level,
+                  "offset" : offset,
+                  "sample_width" : Math.pow(2, level),
+                  "data" : device['data'],
+                  "type" : "value"
+               };
+
+               successCallback(JSON.stringify(json));
+            };
+         }
+         else {
+            channelDatasource = dataManager.getChannelDatasource(id);
+         }
 
          var yAxisElementId = getYAxisElementId(id);
          var plotColor = reservePlotColor(id);
@@ -466,6 +531,7 @@
          var channelInfoBox = $(channelInfoTemplate({
                                                        "yAxisElementId" : yAxisElementId,
                                                        device : device,
+                                                       prettyName : isCorner ? device['prettyName'] : "Speck " + device['prettyName'],
                                                        color : plotColor,
                                                        minValueTimeFormatted : moment.unix(device['minValueTime']).format(TIMESTAMP_FORMAT_SHORT),
                                                        maxValueTimeFormatted : moment.unix(device['maxValueTime']).format(TIMESTAMP_FORMAT_SHORT)
@@ -483,14 +549,13 @@
                   $("#" + id).css('outline', '2px solid black')
                });
 
-         var channelDatasource = dataManager.getChannelDatasource(id);
          var channel = {
             "min" : device['minValue'],
             "max" : device['maxValue'],
             "time_type" : "utc",
             "style" : {
                "styles" : [
-                  {"type" : "line", "lineWidth" : 1, "show" : true, color : plotColor}
+                  {"type" : "line", "lineWidth" : 1, "show" : true, "color" : plotColor}
                ],
                "highlight" : {
                   "lineWidth" : 1,
@@ -515,6 +580,19 @@
                }
             }
          };
+
+         if (isCorner) {
+            channel['style']['styles'].push({
+                                               "type" : "circle",
+                                               "lineWidth" : 1,
+                                               "radius" : 2,
+                                               "fill" : true,
+                                               "show" : true,
+                                               "fillColor" : plotColor,
+                                               "color" : plotColor
+                                            }
+            );
+         }
          grapher.addPlot(id, channel, channelDatasource, yAxisElementId);
          grapher.addDataPointListener(id, displayTimeForDataPoint);
          grapher.addDataPointListener(id, function(val) {
@@ -530,7 +608,6 @@
       }
 
       function displayValueForDataPoint(id, val) {
-         console.log("displayValueForDataPoint(" + id + "," + val + ")");
          var yAxisElementId = getYAxisElementId(id);
          if (val) {
             $("#" + yAxisElementId + "_valueLabelText").show().html(val);
@@ -551,7 +628,7 @@
       }
 
       function setSizes() {
-         var axisControlsWidth = $("#axisControls").is(":visible") ? $("#axisControls").width() : $("#timespanYAxes").width();
+         var axisControlsWidth = $("#axisControls").is(":visible") ? $("#axisControls").width() : 0;
          var plotContainerWidth = $(window).width() - 20 - Math.max($("#yAxesTable").width(), axisControlsWidth) - 2;
          var plotContainerHeight = $("#column0").height() - 2;
 
@@ -670,7 +747,7 @@
    </script>
 
    <script id="grid_cell_template" type="text/x-handlebars-template">
-      <div id="{{id}}" class="gridCell" title="Speck {{prettyName}}"></div>
+      <div id="{{id}}" class="gridCell" title="{{prettyName}}"></div>
    </script>
 
    <script id="y_axis_template" type="text/x-handlebars-template">
@@ -706,7 +783,7 @@
       <div id="{{yAxisElementId}}_channel_info_container" class="channelInfo">
          <div class="yAxisColor" style="background-color:{{color}};border-right:none"></div>
          <div id="{{yAxisElementId}}_channel_info_close_button" class="closeButton" style="float:right;margin-right:3px"></div>
-         <div class="deviceName" style="margin-left:3px"><b>Speck {{device.prettyName}}</b></div>
+         <div class="deviceName" style="margin-left:3px"><b>{{prettyName}}</b></div>
          <div style="padding:3px">
             <table border="0" cellpadding="0" cellspacing="0" align="center">
                <tr>
@@ -735,7 +812,34 @@
       <table border="0" cellpadding="0" cellspacing="0">
          <tr valign="bottom">
             <td>
-               <div id="gridArea"></div>
+               <table border="0" cellpadding="0" cellspacing="0">
+                  <tr>
+                     <td>
+                        <div id="Corner3" class="gridCell" title="Corner 3">C3</div>
+                     </td>
+                     <td>&nbsp;</td>
+                     <td>
+                        <div id="Corner4" class="gridCell" title="Corner 4">C4</div>
+                     </td>
+                  </tr>
+                  <tr>
+                     <td>&nbsp;</td>
+                     <td>
+                        <div id="gridArea"></div>
+                     </td>
+                     <td>&nbsp;</td>
+                  </tr>
+                  <tr>
+                     <td>
+                        <div id="Corner2" class="gridCell" title="Corner 2">C2</div>
+                     </td>
+                     <td>&nbsp;</td>
+                     <td>
+                        <div id="Corner1" class="gridCell" title="Corner 1">C1</div>
+                     </td>
+                  </tr>
+               </table>
+
             </td>
             <td>
                <table border="0" cellpadding="0" cellspacing="0" align="center" style="margin:5px">
@@ -785,7 +889,7 @@
                   <div id="dateAxis"></div>
                </div>
             </td>
-            <td>
+            <td rowspan="2" valign="bottom">
                <table id="axisControls" border="0" cellpadding="0" cellspacing="0" style="display:none;margin-left:5px">
                   <tr>
                      <td>
@@ -794,7 +898,7 @@
                   </tr>
                   <tr>
                      <td>
-                        <input id="autoScaleYAxesButton" type="button" onclick="autoScaleYAxes()" value="Auto Scale">
+                        <input id="autoScaleYAxesButton" type="button" onclick="autoScaleYAxes()" value="Fit Plot(s)">
                         <input id="autoScaleLockCheckbox" name="autoScaleLockCheckbox" type="checkbox" onchange="autoScaleLockChange()" value="true">Lock
                      </td>
                   </tr>
@@ -806,23 +910,6 @@
                <div id="timespanPlotContainer" class="plotContainer timespanPlotContainer">
                   <div id="timespanPlot" class="timespanPlot"></div>
                </div>
-            </td>
-            <td id="timespanYAxes">
-               <table border="0" cellpadding="0" cellspacing="0">
-                  <tr>
-                     <td>
-                        <div class="yAxisContainer timespanYAxisContainer">
-                           <div id="timespanYAxis" class="yAxis timespanYAxis"></div>
-                        </div>
-                     </td>
-                     <td>
-                        <div class="yAxisContainer timespanYAxisContainer">
-                           <div id="timespanCommentsYAxis" class="yAxis timespanYAxis"></div>
-                        </div>
-                     </td>
-                  </tr>
-               </table>
-
             </td>
          </tr>
          <tr id="grapherContainer" style="display:none">
@@ -849,5 +936,20 @@
       </table>
    </div>
 </div>
+<table border="0" cellpadding="0" cellspacing="0" style="display:none">
+   <tr>
+      <td>
+         <div class="yAxisContainer timespanYAxisContainer">
+            <div id="timespanYAxis" class="yAxis timespanYAxis"></div>
+         </div>
+      </td>
+      <td>
+         <div class="yAxisContainer timespanYAxisContainer">
+            <div id="timespanCommentsYAxis" class="yAxis timespanYAxis"></div>
+         </div>
+      </td>
+   </tr>
+</table>
+
 </body>
 </html>

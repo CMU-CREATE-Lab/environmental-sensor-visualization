@@ -73,19 +73,19 @@ body {
 
 .axisCell {
    width: 47px;
-   height: 250px;
+   height: 200px;
 }
 
 .yAxisContainer {
    width: 47px;
-   height: 250px;
+   height: 200px;
    border: 1px solid black;
    border-left-width: 0;
 }
 
 .yAxis {
    width: 47px;
-   height: 250px;
+   height: 200px;
 }
 
 .yAxisColor {
@@ -95,30 +95,30 @@ body {
 }
 
 .plotContainer {
-   height: 250px;
+   height: 200px;
    border: 1px solid black;
 }
 
 .plot {
-   height: 250px;
+   height: 200px;
 }
 
 .timespanPlotContainer {
-   height: 50px;
+   height: 30px;
 }
 
 .timespanPlot {
-   height: 50px;
+   height: 30px;
 }
 
 .timespanYAxisContainer {
    width: 47px;
-   height: 50px;
+   height: 30px;
 }
 
 .timespanYAxis {
    width: 47px;
-   height: 50px;
+   height: 30px;
 }
 
 #valueLabel {
