@@ -695,7 +695,7 @@
 
       function computeAndRenderNextGeneration() {
          if (t < dateAxis.getMax()) {
-            t += parseInt($("#playbackStepIntervalSecs").val());
+            t += 1;
             if (t < dateAxis.getMax()) {
                dateAxis.setCursorPosition(t);
             }
@@ -840,79 +840,68 @@
 <div id="loading_panel">Loading...</div>
 <div id="main_panel">
    <div id="grapher_area" class="textSelectionDisabled">
-      <table border="0" cellpadding="0" cellspacing="0" align="center">
-         <tr valign="bottom">
-            <td>
-               <table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 5px">
-                  <tr>
-                     <td>
-                        <div id="Corner3" class="gridCell" title="Corner 3">C3</div>
-                     </td>
-                     <td>&nbsp;</td>
-                     <td>
-                        <div id="Corner4" class="gridCell" title="Corner 4">C4</div>
-                     </td>
-                  </tr>
-                  <tr>
-                     <td>&nbsp;</td>
-                     <td>
-                        <div id="gridArea"></div>
-                     </td>
-                     <td>&nbsp;</td>
-                  </tr>
-                  <tr>
-                     <td>
-                        <div id="Corner2" class="gridCell" title="Corner 2">C2</div>
-                     </td>
-                     <td>&nbsp;</td>
-                     <td>
-                        <div id="Corner1" class="gridCell" title="Corner 1">C1</div>
-                     </td>
-                  </tr>
-               </table>
-
-            </td>
-            <td>
-               <table border="0" cellpadding="0" cellspacing="0" align="center" style="margin: 5px 5px 5px 25px;">
-                  <tr>
-                     <td><input id="playButton" type="button" onclick="play()" value="Play" style="margin-right:15px"></td>
-                     <td>step</td>
-                     <td>
-                        <select id="playbackStepIntervalSecs">
-                           <option value="1">1 second</option>
-                           <option value="2">2 seconds</option>
-                           <option value="5">5 seconds</option>
-                           <option value="10">10 seconds</option>
-                           <option value="30">30 seconds</option>
-                           <option value="60">1 minute</option>
-                        </select>
-                     </td>
-                     <td>every</td>
-                     <td>
-                        <select id="animationIntervalMillis">
-                           <option value="1000">1</option>
-                           <option value="500">1/2</option>
-                           <option value="200">1/5</option>
-                           <option value="100" selected="selected">1/10</option>
-                           <option value="50">1/20</option>
-                           <option value="10">1/100</option>
-                        </select>
-                     </td>
-                     <td>second</td>
-                  </tr>
-                  <tr>
-                     <td colspan="3">
-                        <div id="animationTimeLabel" style="text-align: left; margin-left:3px"></div>
-                     </td>
-                     <td colspan="3" align="right">
-                        <input id="resetDateAxisButton" type="button" onclick="resetDateAxis()" value="Reset Time Range"><br>
-                     </td>
-                  </tr>
-               </table>
-            </td>
-         </tr>
-      </table>
       <table border="0" cellpadding="0" cellspacing="0">
+         <tr>
+            <td>
+               <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                  <tr valign="bottom">
+                     <td>
+                        <table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 5px">
+                           <tr>
+                              <td>
+                                 <div id="Corner3" class="gridCell" title="Corner 3">C3</div>
+                              </td>
+                              <td>&nbsp;</td>
+                              <td>
+                                 <div id="Corner4" class="gridCell" title="Corner 4">C4</div>
+                              </td>
+                              <td rowspan="3" valign="bottom">
+                                 <table border="0" cellpadding="0" cellspacing="0" align="center" style="margin: 5px 0 0 25px;">
+                                    <tr valign="middle">
+                                       <td><input id="playButton" type="button" onclick="play()" value="Play"></td>
+                                       <td>
+                                          <select id="animationIntervalMillis">
+                                             <option value="1000">1x</option>
+                                             <option value="200">5x</option>
+                                             <option value="100">10x</option>
+                                             <option value="50">20x</option>
+                                             <option value="20" selected="selected">50x</option>
+                                             <option value="10">100x</option>
+                                          </select>
+                                       </td>
+                                       <td style="padding-left:20px">
+                                          <input id="resetDateAxisButton" type="button" onclick="resetDateAxis()" value="Reset Time Range">
+                                       </td>
+                                    </tr>
+                                 </table>
+                              </td>
+                           </tr>
+                           <tr>
+                              <td>&nbsp;</td>
+                              <td>
+                                 <div id="gridArea"></div>
+                              </td>
+                              <td>&nbsp;</td>
+                           </tr>
+                           <tr>
+                              <td>
+                                 <div id="Corner2" class="gridCell" title="Corner 2">C2</div>
+                              </td>
+                              <td>&nbsp;</td>
+                              <td>
+                                 <div id="Corner1" class="gridCell" title="Corner 1">C1</div>
+                              </td>
+                           </tr>
+                        </table>
+                     </td>
+                     <td align="right">
+                        <div id="animationTimeLabel" style="text-align:right"></div>
+                     </td>
+                  </tr>
+               </table>
+            </td>
+            <td></td>
+         </tr>
          <tr>
             <td>
                <div id="dateAxisContainer">
@@ -927,9 +916,9 @@
                      </td>
                   </tr>
                   <tr>
-                     <td>
+                     <td style="font-size: smaller">
                         <input id="autoScaleYAxesButton" type="button" onclick="autoScaleYAxes()" value="Fit Plot(s)">
-                        <input id="autoScaleLockCheckbox" name="autoScaleLockCheckbox" type="checkbox" onchange="autoScaleLockChange()" value="true">Lock
+                        <input id="autoScaleLockCheckbox" name="autoScaleLockCheckbox" type="checkbox" onchange="autoScaleLockChange()" value="true">Auto
                      </td>
                   </tr>
                </table>

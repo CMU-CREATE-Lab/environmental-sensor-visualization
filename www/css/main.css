@@ -72,19 +72,19 @@ body {
 }
 
 .axisCell {
-   width: 47px;
+   width: 42px;
    height: 200px;
 }
 
 .yAxisContainer {
-   width: 47px;
+   width: 42px;
    height: 200px;
    border: 1px solid black;
    border-left-width: 0;
 }
 
 .yAxis {
-   width: 47px;
+   width: 42px;
    height: 200px;
 }
 
@@ -112,12 +112,12 @@ body {
 }
 
 .timespanYAxisContainer {
-   width: 47px;
+   width: 42px;
    height: 30px;
 }
 
 .timespanYAxis {
-   width: 47px;
+   width: 42px;
    height: 30px;
 }
 
