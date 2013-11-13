@@ -35,11 +35,6 @@
       var canvasLayer;
       var context;
 
-      var latMin = 10000;
-      var latMax = -10000;
-      var lngMin = 10000;
-      var lngMax = -10000;
-
       var points = [];
 
       $(document).ready(function() {
@@ -93,11 +88,6 @@
                            timeUtcSecs : timeUtcSecs,
                            latLong : latLong
                         });
-
-            latMin = Math.min(latMin, lat);
-            latMax = Math.max(latMax, lat);
-            lngMin = Math.min(lngMin, lng);
-            lngMax = Math.max(lngMax, lng);
          });
       }
 
