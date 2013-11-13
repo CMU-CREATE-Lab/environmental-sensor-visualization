@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html>
+<head>
+   <title>AirNow Visualization</title>
+   <link href="css/main.css" rel="stylesheet">
+   <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCGR21nG0gjPnQZtlCbPIxpDcJ2T2fOrf8&sensor=false"></script>
+   <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+   <script src="lib/canvas-layer/src/CanvasLayer.js"></script>
+   <script src="lib/handlebars.js"></script>
+   <script src="lib/moment.min.js"></script>
+   <script src="lib/commons-javascript/org/cmucreatelab/util/Arrays.js"></script>
+   <script src="lib/commons-javascript/org/cmucreatelab/util/Http.js"></script>
+   <script src="js/org/bodytrack/grapher/gwt/grapher2.nocache.js"></script>
+   <script src="js/org/bodytrack/grapher/MultiplotGrapher.js"></script>
+   <script src="js/org/cmucreatelab/visualization/DataManager.js"></script>
+   <script src="js/org/cmucreatelab/visualization/airnow/AirNowDevices.js"></script>
+   <script language="JavaScript" type="text/javascript">
+      var TWO_PI = 2 * Math.PI;
+
+      var METADATA_URL = "data/airnow_metadata.json";
+      var DATA_URL = "data/airnow_data.bin";
+
+      var TIMESTAMP_FORMAT = "YYYY-MM-DD HH:mm";
+
+      // Got concentration descriptions and ranges from slides 5 and 11 in http://www.epa.gov/international/public-participation-guide/workshopPDFs/zell-aqi.pdf
+      // and RGB color codes from http://www.airnowapi.org/aq101
+      var PARTICLE_CONCENTRATION_INDEX = [
+         {
+            min : 0,
+            max : 15.4,
+            name : "Good",
+            description : "Normal, healthy concentration. No suggested restrictions on activity.",
+            color : "rgba(0,228,0,0.6)" // "#00e400"
+         },
+         {
+            min : 15.5,
+            max : 40.4,
+            name : "Moderate",
+            description : "Unusually sensitive people should reduce prolonged or heavy exertion",
+            color : "rgba(255,255,0,0.6)" // "#ffff00"
+         },
+         {
+            min : 40.5,
+            max : 65.4,
+            name : "Unhealthy for Sensitive Groups",
+            description : "Sensitive groups should reduce prolonged or heavy exertion",
+            color : "rgba(255,126,0,0.6)" // "#ff7e00"
+         },
+         {
+            min : 65.5,
+            max : 150.4,
+            name : "Unhealthy",
+            description : "Sensitive groups should avoid prolonged or heavy exertion; general public should reduce prolonged or heavy exertion",
+            color : "rgba(255,0,0,0.6)" // "#ff0000"
+         },
+         {
+            min : 150.5,
+            max : 250.4,
+            name : "Very Unhealthy",
+            description : "Sensitive groups should avoid all physical activity outdoors; general public should avoid prolonged or heavy exertion",
+            color : "rgba(153,0,76,0.6)" // "#99004c"
+         },
+         {
+            min : 250.5,
+            max : 500.4,
+            name : "Hazardous",
+            description : "Everyone should avoid all physical activity outdoors",
+            color : "rgba(126,0,35,0.6)" // "#7e0023"
+         }
+      ];
+
+      var dataManager = null;
+
+      var channelInfoTemplate = null;
+      var yAxisTemplate = null;
+      var yAxisColorTemplate = null;
+      var yAxisInfoTemplate = null;
+      var dateAxis;
+      var grapher;
+      var plotContainer;
+
+      var map;
+      var canvasLayer;
+      var context;
+
+      var markers = {};
+      var currentlySelectedMarkers = {};
+      var numCurrentlySelectedMarkers = 0;
+      var MAX_NUM_SELECTED_MARKERS = 5;
+      var availablePlotColors = ["#990000", "#009900", "#000099", "#999900", "#6600ff"];
+      var usedPlotColorsByDeviceId = {};
+
+      var isPlaying = false;
+      var timeoutHandle = null;
+      var t = null;
+
+      window.grapherLoad = loadData;
+
+      function loadData() {
+         $.ajax({
+                   url : METADATA_URL,
+                   type : 'GET',
+                   dataType : 'json',
+                   timeout : 5000,
+                   cache : false,
+                   global : false,
+                   success : function(devicesMetadata) {
+                      if (devicesMetadata && devicesMetadata['devices']) {
+                         loadBinaryData(devicesMetadata);
+                      }
+                      else {
+                         console.log("Failed to load " + METADATA_URL);
+                      }
+                   },
+                   error : function() {
+                      console.log("Failed to load " + METADATA_URL);
+                   }
+                });
+
+      }
+
+      function loadBinaryData(devicesMetadata) {
+         org.cmucreatelab.util.Http.loadArrayBuffer(DATA_URL,
+                                                    {
+                                                       success : function(arrayBuffer) {
+                                                          console.log("loadArrayBuffer SUCCESS!");
+                                                          var devices = new org.cmucreatelab.visualization.airnow.AirNowDevices(devicesMetadata, arrayBuffer);
+                                                          dataManager = new org.cmucreatelab.visualization.DataManager(devices);
+
+                                                          // now that all the data is loaded, go ahead and initialize the page
+                                                          initialize();
+                                                       },
+                                                       failure : function(requestStatus) {
+                                                          // TODO: do something better
+                                                          alert("Failed to load the data from [" + DATA_URL + "] (Request Status: " + requestStatus + ")");
+                                                       }
+                                                    });
+      }
+
+      function initialize() {
+         $("#loading_panel").hide();
+         $("#main_panel").show();
+
+         initializeMap();
+
+         // compile the templates for later use
+         channelInfoTemplate = Handlebars.compile($("#channel_info_template").html());
+         yAxisTemplate = Handlebars.compile($("#y_axis_template").html());
+         yAxisColorTemplate = Handlebars.compile($("#y_axis_color_template").html());
+         yAxisInfoTemplate = Handlebars.compile($("#y_axis_info_template").html());
+
+         // create the legend
+         var legendRowTemplate = Handlebars.compile($("#legend_row_template").html());
+         $.each(PARTICLE_CONCENTRATION_INDEX, function(index, item) {
+            $("#legendTable").append(legendRowTemplate(item));
+         });
+
+         // configure the DataManager
+         dataManager.addDataChangeListener(function(valuesMap) {
+            $.each(valuesMap, function(name, value) {
+               markers[name]['value'] = value;
+            });
+            canvasLayerUpdateHandler();
+         });
+
+         // initialize the DateAxis, Grapher, and PlotContainer
+         var globalTimeRange = dataManager.getGlobalTimeRange();
+         dateAxis = new DateAxis("dateAxis", "horizontal", {"min" : globalTimeRange['min'], "max" : globalTimeRange['max']});
+         dateAxis.addAxisChangeListener(function(cursorChangeEvent) {
+            // set the animation time here so that the user can click the plot to affect the animation playback position
+            t = cursorChangeEvent['cursorPosition'];
+            displayAnimationTime(t);
+
+            // notify the data manager of the axis change
+            dataManager.setTimeRange({
+                                        "min" : cursorChangeEvent['min'],
+                                        "max" : cursorChangeEvent['max'],
+                                        "cursorPosition" : cursorChangeEvent['cursorPosition']
+                                     });
+         });
+         grapher = new org.bodytrack.grapher.MultiplotGrapher(dateAxis);
+         plotContainer = new PlotContainer("pc1", false, []);
+
+         dataManager.setLatLongBounds(map.getBounds());
+
+         console.log("before grapher area show");
+
+         // show the grapher area
+         $("#grapher_area").show();
+
+         // set initial sizes
+         setSizes();
+
+         // set up window resize handler
+         $(window).resize(setSizes);
+      }
+
+      function initializeMap() {
+         console.log("In init map");
+         var mapOptions = {
+            center : new google.maps.LatLng(39.043246371518045, -94.07431000579834),
+            zoom : 4,
+            mapTypeId : google.maps.MapTypeId.TERRAIN
+         };
+         map = new google.maps.Map(document.getElementById("mapArea"), mapOptions);
+         google.maps.event.addListener(map, 'bounds_changed', function() {
+            console.log("Map bounds changed");
+         });
+
+         // Add an idle event listener ONCE to handle map loading.
+         google.maps.event.addListenerOnce(map, 'idle', function() {
+            console.log("Map is done loading");
+            initializeCanvas();
+            initializeMarkers();
+         });
+      }
+
+      var isCanvasInitialized = false;
+
+      function initializeCanvas() {
+         // initialize the canvasLayer
+         var canvasLayerOptions = {
+            map : map,
+            resizeHandler : canvasLayerResizeHandler,
+            animate : false,
+            updateHandler : canvasLayerUpdateHandler
+         };
+         canvasLayer = new CanvasLayer(canvasLayerOptions);
+         context = canvasLayer.canvas.getContext('2d');
+         isCanvasInitialized = true;
+      }
+
+      function canvasLayerResizeHandler() {
+         // nothing to do
+      }
+
+      function canvasLayerUpdateHandler() {
+
+         // clear previous canvas contents
+         var canvasWidth = canvasLayer.canvas.width;
+         var canvasHeight = canvasLayer.canvas.height;
+         context.clearRect(0, 0, canvasWidth, canvasHeight);
+
+         /* We need to scale and translate the map for current view.
+          * see https://developers.google.com/maps/documentation/javascript/maptypes#MapCoordinates
+          */
+         var mapProjection = map.getProjection();
+
+         /**
+          * Clear transformation from last update by setting to identity matrix.
+          * Could use context.resetTransform(), but most browsers don't support
+          * it yet.
+          */
+         context.setTransform(1, 0, 0, 1, 0, 0);
+
+         // scale is just 2^zoom
+         var scale = Math.pow(2, map.zoom);
+         var scaleInverse = 1 / scale;
+         context.scale(scale, scale);
+
+         /* If the map was not translated, the topLeft corner would be 0,0 in
+          * world coordinates. Our translation is just the vector from the
+          * world coordinate of the topLeft corder to 0,0.
+          */
+         var topLeft = canvasLayer.getTopLeft();
+         if (topLeft) {
+            var offset = mapProjection.fromLatLngToPoint(topLeft);
+            context.translate(-offset.x, -offset.y);
+            console.log("Offset: " + offset.toString());
+
+            var mapBounds = map.getBounds();
+
+            var pointsDrawn = 0;
+            // render the points
+
+            $.each(markers, function(markerId, marker) {
+               if (mapBounds.contains(marker['location'])) {
+                  drawPoint(mapProjection, scaleInverse, marker);
+                  pointsDrawn++;
+               }
+            });
+            console.log("Drew [" + pointsDrawn + "] points");
+         }
+      }
+
+      function drawPoint(mapProjection, scaleInverse, point) {
+         // project rectLatLng to world coordinates and draw
+         var worldPoint = mapProjection.fromLatLngToPoint(point['location']);
+         var isNoData = point['value'] == null;
+         drawCircle(worldPoint.x, worldPoint.y, (isNoData ? 4 : 6) * scaleInverse, isNoData ? "rgba(102,102,102,0.5)" : getColorForValue(point['value']));
+      }
+
+      function drawCircle(x, y, radius, color) {
+         context.beginPath();
+         context.arc(x, y, radius, 0, TWO_PI, false);
+         context.fillStyle = color;
+         context.fill();
+      }
+
+      function initializeMarkers() {
+         dataManager.forEachDevice(function(name, device) {
+            var latLong = new google.maps.LatLng(device['latitude'], device['longitude'])
+            addMarker(name, latLong, true)
+         });
+
+         // set initial cursor to the midpoint of the available data--this will trigger the data change event,
+         // which will color the markers appropriately.
+         var globalTimeRange = dataManager.getGlobalTimeRange();
+         dateAxis.setCursorPosition((globalTimeRange['min'] + globalTimeRange['max']) / 2);
+      }
+
+      // Add a marker to the map and push to the array.
+      function addMarker(id, location, isActive) {
+
+         markers[id] = {
+            id : id,
+            location : location,
+            isActive : isActive,
+            value : null
+         };
+      }
+
+      function setMarkerSelected(id, marker, isSelected) {
+
+         if (isSelected) {
+            currentlySelectedMarkers[id] = marker;
+         }
+         else {
+            delete currentlySelectedMarkers[id];
+         }
+         numCurrentlySelectedMarkers = numCurrentlySelectedMarkers + (isSelected ? 1 : -1);
+
+         // finally, add or remove the channel as appropriate
+         (isSelected) ? loadChannel(id) : removeChannel(id);
+      }
+
+      function getColorForValue(value) {
+         if (value) {
+            return getParticleConcentrationIndex(value)['color'];
+         }
+         return null;
+      }
+
+      function getParticleConcentrationIndex(value) {
+         if (value <= PARTICLE_CONCENTRATION_INDEX[0]['max']) {
+            return PARTICLE_CONCENTRATION_INDEX[0];
+         }
+         else if (value > PARTICLE_CONCENTRATION_INDEX[PARTICLE_CONCENTRATION_INDEX.length - 2]['max']) {
+            return PARTICLE_CONCENTRATION_INDEX[PARTICLE_CONCENTRATION_INDEX.length - 1];
+         }
+         else {
+            for (var i = 1; i < PARTICLE_CONCENTRATION_INDEX.length - 1; i++) {
+               if (value <= PARTICLE_CONCENTRATION_INDEX[i]['max']) {
+                  return PARTICLE_CONCENTRATION_INDEX[i];
+               }
+            }
+         }
+         return PARTICLE_CONCENTRATION_INDEX[PARTICLE_CONCENTRATION_INDEX.length - 1];
+      }
+
+      function removeChannel(id) {
+         plotContainer.removePlot(grapher.getPlot(id));
+         grapher.removePlot(id);
+         $("#" + getYAxisElementId(id) + "_container").remove();
+         $("#" + getYAxisElementId(id) + "_color_container").remove();
+         $("#" + getYAxisElementId(id) + "_info_container").remove();
+         $("#" + getYAxisElementId(id) + "_channel_info_container").remove();
+         returnPlotColor(id);
+
+         if (numCurrentlySelectedMarkers <= 0) {
+            $("#grapherContainer").hide();
+            $("#channelInfosContainer").hide();
+         }
+         setSizes();
+      }
+
+      function reservePlotColor(id) {
+         var color = availablePlotColors.splice(0, 1)[0];
+         usedPlotColorsByDeviceId[id] = color;
+         return color;
+      }
+
+      function returnPlotColor(id) {
+         availablePlotColors.push(usedPlotColorsByDeviceId[id]);
+         delete usedPlotColorsByDeviceId[id];
+      }
+
+      function getYAxisElementId(id) {
+         // WARNING! This assumes that the id has no spaces and that the
+         // line below will produce a legal value for a DOM element id
+         return  "yAxis" + id;
+      }
+
+      function loadChannel(id) {
+         var device = dataManager.findByName(id);
+
+         var yAxisElementId = getYAxisElementId(id);
+         var plotColor = reservePlotColor(id);
+
+         $("#yAxes").append(yAxisTemplate({"yAxisElementId" : yAxisElementId}));
+         $("#yAxesColor").append(yAxisColorTemplate({"yAxisElementId" : yAxisElementId, color : plotColor}));
+         $("#yAxesInfo").append(yAxisInfoTemplate({"yAxisElementId" : yAxisElementId}));
+         $("#channelInfos").append(channelInfoTemplate({
+                                                          "yAxisElementId" : yAxisElementId,
+                                                          device : device,
+                                                          color : plotColor,
+                                                          minTimeFormatted : moment.unix(device['minTime']).format(TIMESTAMP_FORMAT),
+                                                          maxTimeFormatted : moment.unix(device['maxTime']).format(TIMESTAMP_FORMAT)
+                                                       }));
+         $("#" + yAxisElementId + "_channel_info_close_button").click(function() {
+            setMarkerSelected(id, currentlySelectedMarkers[id], false);
+         });
+
+         var channelDatasource = dataManager.getChannelDatasource(id);
+         var channel = {
+            "min" : device['minValue'],
+            "max" : device['maxValue'],
+            "style" : {
+               "styles" : [
+                  {"type" : "line", "lineWidth" : 1, "show" : true, color : plotColor}
+               ],
+               highlight : {
+                  "lineWidth" : 1,
+                  "styles" : [
+                     {
+                        "type" : "lollipop",
+                        "color" : "#000000",
+                        "radius" : 1,
+                        "lineWidth" : 1,
+                        "fill" : false
+                     },
+                     {
+                        "show" : true,
+                        "type" : "value",
+                        "fillColor" : "#000000",
+                        "marginWidth" : 10,
+                        "font" : "7pt Helvetica,Arial,Verdana,sans-serif",
+                        "verticalOffset" : 7,
+                        "numberFormat" : "###,##0.0##"
+                     }
+                  ]
+               }
+            }
+         };
+         grapher.addPlot(id, channel, channelDatasource, yAxisElementId);
+         grapher.addDataPointListener(id, displayTimeForDataPoint);
+         grapher.addDataPointListener(id, function(val) {
+            displayValueForDataPoint(id, val ? val['valueString'] : null);
+         });
+         plotContainer.addPlot(grapher.getPlot(id));
+
+         $("#grapherContainer").show();
+         $("#channelInfosContainer").show();
+
+         setSizes();
+      }
+
+      function displayValueForDataPoint(id, val) {
+         var yAxisElementId = getYAxisElementId(id);
+         if (val) {
+            $("#" + yAxisElementId + "_valueLabelText").show().html(val);
+            $("#" + yAxisElementId + "_valueLabelColor").show().css('background-color', getColorForValue(val));
+         }
+         else {
+            $("#" + yAxisElementId + "_valueLabelText").hide();
+            $("#" + yAxisElementId + "_valueLabelColor").hide();
+         }
+      }
+
+      function displayTimeForDataPoint(val) {
+         $("#timeLabel").html(val ? moment.unix(val['date']).format(TIMESTAMP_FORMAT) : "");
+      }
+
+      function displayAnimationTime(val) {
+         $("#animationTimeLabel").html(val ? moment.unix(val).format(TIMESTAMP_FORMAT) : "");
+      }
+
+      function setSizes() {
+         var plotContainerWidth = $(window).width() - 20 - Math.max($("#yAxesCell").width(), $("#legend").width()) - 2;
+         var plotContainerHeight = $("#column0").height() - 2;
+
+         // resize date axis, plot container, and y axes
+         dateAxis.setSize(plotContainerWidth, $("#dateAxis").height(), SequenceNumber.getNext());
+         plotContainer.setSize(plotContainerWidth, plotContainerHeight, SequenceNumber.getNext());
+         grapher.updateYAxesSizes();
+         $(".channelInfo").width((plotContainerWidth) / MAX_NUM_SELECTED_MARKERS);
+      }
+
+      function jumpToTime(time) {
+         var dateAxisHalfRange = (dateAxis.getMax() - dateAxis.getMin()) / 2;
+         dateAxis.setCursorPosition(time);
+         dateAxis.setRange(time - dateAxisHalfRange, time + dateAxisHalfRange);
+      }
+
+      function play() {
+         if (!isPlaying) {
+            isPlaying = true;
+            t = dateAxis.getMin();
+            $("#playButton").val("Stop");
+            computeAndRenderNextGeneration();
+         }
+         else {
+            isPlaying = false;
+            $("#playButton").val("Play");
+            window.clearTimeout(timeoutHandle);
+            timeoutHandle = null;
+         }
+      }
+
+      function computeAndRenderNextGeneration() {
+         if (t < dateAxis.getMax()) {
+            t += parseInt($("#playbackStepIntervalSecs").val());
+            if (t < dateAxis.getMax()) {
+               dateAxis.setCursorPosition(t);
+            }
+            else {
+               dateAxis.setCursorPosition(dateAxis.getMax());
+               play();
+            }
+         }
+         else {
+            dateAxis.setCursorPosition(dateAxis.getMax());
+            play();
+         }
+
+         if (isPlaying) {
+            window.clearTimeout(timeoutHandle);
+            timeoutHandle = window.setTimeout(computeAndRenderNextGeneration, $("#animationIntervalMillis").val());
+         }
+      }
+
+   </script>
+
+   <script id="legend_row_template" type="text/x-handlebars-template">
+      <tr valign="bottom">
+         <td>
+            <a href="#" onclick="return false;" title="{{description}}" style="cursor:default">
+               <div class="legendColor" style="background-color: {{color}}"></div>
+            </a>
+         </td>
+         <td>{{name}}</td>
+         <td align="right">{{min}} - {{max}} &#181;g/m<sup>3</sup></td>
+      </tr>
+   </script>
+
+   <script id="y_axis_template" type="text/x-handlebars-template">
+      <td id="{{yAxisElementId}}_container" class="axisCell">
+         <div class="yAxisContainer">
+            <div id="{{yAxisElementId}}" class="yAxis"></div>
+         </div>
+      </td>
+   </script>
+
+   <script id="y_axis_color_template" type="text/x-handlebars-template">
+      <td id="{{yAxisElementId}}_color_container">
+         <div class="yAxisColor" style="background-color:{{color}}"></div>
+      </td>
+   </script>
+
+   <script id="y_axis_info_template" type="text/x-handlebars-template">
+      <td id="{{yAxisElementId}}_info_container">
+         <table border="0" cellpadding="0" cellspacing="0" align="right">
+            <tr>
+               <td>
+                  <div id="{{yAxisElementId}}_valueLabelText" class="valueLabelText"></div>
+               </td>
+               <td>
+                  <div id="{{yAxisElementId}}_valueLabelColor" class="valueLabelColor"></div>
+               </td>
+            </tr>
+         </table>
+      </td>
+   </script>
+
+   <script id="channel_info_template" type="text/x-handlebars-template">
+      <div id="{{yAxisElementId}}_channel_info_container" class="channelInfo">
+         <div class="yAxisColor" style="background-color:{{color}};border-right:none"></div>
+         <div id="{{yAxisElementId}}_channel_info_close_button" class="closeButton" style="float:right;margin-right:3px"></div>
+         <div class="deviceName"><b>{{device.name}}</b></div>
+         <table border="0" cellpadding="0" cellspacing="0">
+            <tr>
+               <td class="channelInfoLabel">Start Time:</td>
+               <td>&nbsp;</td>
+               <td align="right"><a href="#" onclick="jumpToTime({{device.minTime}}); return false;">{{minTimeFormatted}}</a></td>
+            </tr>
+            <tr>
+               <td class="channelInfoLabel">End Time:</td>
+               <td>&nbsp;</td>
+               <td align="right"><a href="#" onclick="jumpToTime({{device.maxTime}}); return false;">{{maxTimeFormatted}}</a></td>
+            </tr>
+            <tr>
+               <td class="channelInfoLabel">Max Value:</td>
+               <td>&nbsp;</td>
+               <td align="right"><a href="#" onclick="jumpToTime({{device.maxValueTime}}); return false;">{{device.maxValue}} &#181;g/m<sup>3</sup></a></td>
+            </tr>
+            <tr>
+               <td class="channelInfoLabel">Min Value:</td>
+               <td>&nbsp;</td>
+               <td align="right"><a href="#" onclick="jumpToTime({{device.minValueTime}}); return false;">{{device.minValue}} &#181;g/m<sup>3</sup></a></td>
+            </tr>
+         </table>
+      </div>
+   </script>
+</head>
+<body>
+<div id="loading_panel">Loading...</div>
+<div id="main_panel">
+   <div id="grapher_area" class="textSelectionDisabled">
+      <table id="grapher" border="0" cellpadding="0" cellspacing="0">
+         <tr valign="top">
+            <td width="400">
+               <div id="mapArea">Map goes here</div>
+            </td>
+            <td id="legend">
+               <table id="legendTable" border="0" cellpadding="3" cellspacing="0" style="margin-left: 5px">
+                  <tr>
+                     <td colspan="3" align="center"><b>U.S. EPA PM<sub>2.5</sub> AQI</b></td>
+                  </tr>
+               </table>
+            </td>
+         </tr>
+         <tr>
+            <td width="400">
+               <div id="dateAxisContainer">
+                  <div id="dateAxis"></div>
+               </div>
+            </td>
+            <td>
+               <table border="0" cellpadding="0" cellspacing="0" align="center">
+                  <tr>
+                     <td><input id="playButton" type="button" onclick="play()" value="Play" style="margin-right:15px"></td>
+                     <td>step</td>
+                     <td>
+                        <select id="playbackStepIntervalSecs">
+                           <option value="3600">1 hour</option>
+                           <option value="21600">6 hours</option>
+                           <option value="43200">12 hours</option>
+                           <option value="86400">1 day</option>
+                           <option value="604800">1 week</option>
+                        </select>
+                     </td>
+                     <td>every</td>
+                     <td>
+                        <select id="animationIntervalMillis">
+                           <option value="1000">1</option>
+                           <option value="500">1/2</option>
+                           <option value="200">1/5</option>
+                           <option value="100" selected="selected">1/10</option>
+                           <option value="50">1/20</option>
+                           <option value="20">1/50</option>
+                           <option value="10">1/100</option>
+                        </select>
+                     </td>
+                     <td>second</td>
+                  </tr>
+                  <tr>
+                     <td colspan="6">
+                        <div id="animationTimeLabel"></div>
+                     </td>
+                  </tr>
+               </table>
+
+            </td>
+         </tr>
+         <tr id="grapherContainer" style="display:none">
+            <td width="400" id="column0">
+               <div id="plotContainer1" class="plotContainer">
+                  <div id="pc1" class="plot"></div>
+               </div>
+            </td>
+            <td rowspan="2" valign="top" id="yAxesCell">
+               <table border="0" cellpadding="0" cellspacing="0">
+                  <tr id="yAxes"></tr>
+                  <tr id="yAxesColor"></tr>
+                  <tr id="yAxesInfo"></tr>
+               </table>
+               <div id="timeLabel"></div>
+            </td>
+         </tr>
+         <tr id="channelInfosContainer" valign="top" style="display:none">
+            <td>
+               <div id="channelInfos" style="display: table-row"></div>
+            </td>
+            <td>&nbsp;</td>
+         </tr>
+      </table>
+   </div>
+</div>
+</body>
+</html>
