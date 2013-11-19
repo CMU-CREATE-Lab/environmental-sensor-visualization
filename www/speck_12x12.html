@@ -101,8 +101,8 @@
 
                          $.each(devicesMetadata['devices'],
                                 function(index, device) {
-                                   var row = device['row'];
-                                   var col = device['col'];
+                                   var row = device['latitude'];
+                                   var col = device['longitude'];
                                    if (typeof deviceNameGrid[row] === 'undefined') {
                                       deviceNameGrid[row] = [];
                                    }
