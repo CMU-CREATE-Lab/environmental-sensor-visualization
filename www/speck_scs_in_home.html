@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html>
+<head>
+   <title>Speck SCS In Home Test</title>
+   <link href="css/main.css" rel="stylesheet">
+   <style type="text/css">
+      .title-text {
+         font-size: 16pt;
+         font-weight: bold;
+         text-align: center;
+      }
+
+      #titleAndLegendArea {
+         padding-left: 10px;
+         width: 350px;
+         max-width: 350px;
+      }
+
+      #animationControls {
+         padding: 0 5px 5px 5px;
+      }
+   </style>
+   <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCGR21nG0gjPnQZtlCbPIxpDcJ2T2fOrf8&sensor=false"></script>
+   <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+   <script src="lib/handlebars.js"></script>
+   <script src="lib/moment.min.js"></script>
+   <script src="lib/commons-javascript/org/cmucreatelab/util/Arrays.js"></script>
+   <script src="lib/commons-javascript/org/cmucreatelab/util/Http.js"></script>
+   <script src="js/org/bodytrack/grapher/gwt/grapher2.nocache.js"></script>
+   <script src="js/org/bodytrack/grapher/MultiplotGrapher.js"></script>
+   <script src="js/org/cmucreatelab/visualization/DataManager.js"></script>
+   <script src="js/org/cmucreatelab/visualization/speck/SpeckDevices.js"></script>
+   <script language="JavaScript" type="text/javascript">
+
+      var METADATA_URL = "data/speck_scs_in_home_metadata.json";
+      var DATA_URL = "data/speck_scs_in_home_data.bin";
+
+      var TIMESTAMP_FORMAT = "YYYY-MM-DD HH:mm";
+      var TIMESTAMP_FORMAT_SHORT = "HH:mm:ss";
+
+      var MIN_PARTICLES = 0;
+      var MAX_PARTICLES = 800;
+      var HSL_RED = 0;
+      var HSL_GREEN = 120;
+
+      // Got these divergent palettes from http://colorbrewer2.org/
+      var DIVERGENT_PALETTE = [ "#006837", "#1A9850", "#66BD63", "#A6D96A", "#D9EF8B", "#FFFFBF", "#FEE08B", "#FDAE61", "#F46D43", "#D73027", "#A50026" ];
+      var DIVERGENT_PALETTE_COLORBLIND_SAFE = ["#313695", "#4575B4", "#74ADD1", "#ABD9E9", "#E0F3F8", "#FFFFBF", "#FEE090", "#FDAE61", "#F46D43", "#D73027", "#A50026"];
+
+      var dataManager = null;
+
+      var channelInfoTemplate = null;
+      var yAxisTemplate = null;
+      var yAxisColorTemplate = null;
+      var yAxisInfoTemplate = null;
+      var dateAxis;
+      var grapher;
+      var plotContainer;
+
+      var map;
+      var markers = {};
+      var currentlySelectedMarkers = {};
+      var numCurrentlySelectedMarkers = 0;
+      var MAX_NUM_SELECTED_MARKERS = 5;
+      var availablePlotColors = ["#990000", "#009900", "#000099", "#999900", "#6600ff"];
+      var usedPlotColorsByDeviceId = {};
+
+      var globalTimeRange = null;
+      var isPlaying = false;
+      var timeoutHandle = null;
+      var t = null;
+
+      var isAutoScaleOn = false;
+
+      var LOCATION_FILTERS = ["basement", "bathroom", "bedroom", "dining room", "hallway", "kitchen", "living room", "office", "unspecified"];
+      var devicesByLocationFilter = {};
+      var deviceCountByLocationFilter = {};
+      var currentlySelectedLocationFilter = 'all';
+
+      window.grapherLoad = loadData;
+
+      function loadData() {
+         $.ajax({
+                   url : METADATA_URL,
+                   type : 'GET',
+                   dataType : 'json',
+                   timeout : 5000,
+                   cache : false,
+                   global : false,
+                   success : function(devicesMetadata) {
+                      if (devicesMetadata && devicesMetadata['devices']) {
+                         loadBinaryData(devicesMetadata);
+                      }
+                      else {
+                         console.log("Failed to load " + METADATA_URL);
+                      }
+                   },
+                   error : function() {
+                      console.log("Failed to load " + METADATA_URL);
+                   }
+                });
+      }
+
+      function loadBinaryData(devicesMetadata) {
+         org.cmucreatelab.util.Http.loadArrayBuffer(DATA_URL,
+                                                    {
+                                                       success : function(arrayBuffer) {
+                                                          console.log("loadArrayBuffer SUCCESS!");
+                                                          var devices = new org.cmucreatelab.visualization.speck.SpeckDevices(devicesMetadata, arrayBuffer);
+                                                          dataManager = new org.cmucreatelab.visualization.DataManager(devices);
+
+                                                          // now that all the data is loaded, go ahead and initialize the page
+                                                          initialize();
+                                                       },
+                                                       failure : function(requestStatus) {
+                                                          // TODO: do something better
+                                                          alert("Failed to load the data from [" + DATA_URL + "] (Request Status: " + requestStatus + ")");
+                                                       }
+                                                    });
+      }
+
+      function initialize() {
+         $("#loading_panel").hide();
+         $("#main_panel").show();
+
+         initializeMap();
+
+         // compile the templates for later use
+         channelInfoTemplate = Handlebars.compile($("#channel_info_template").html());
+         yAxisTemplate = Handlebars.compile($("#y_axis_template").html());
+         yAxisColorTemplate = Handlebars.compile($("#y_axis_color_template").html());
+         yAxisInfoTemplate = Handlebars.compile($("#y_axis_info_template").html());
+
+         // create the legend
+         // TODO
+
+         // configure the DataManager
+         dataManager.addDataChangeListener(function(valuesMap) {
+            $.each(valuesMap, function(name, value) {
+               var marker = markers[name];
+               var icon = marker.getIcon();
+               var isNoData = (value === null);
+               var isVisible = typeof devicesByLocationFilter[currentlySelectedLocationFilter][name] !== 'undefined';
+               if (isVisible) {
+                  icon['fillColor'] = isNoData ? "#666666" : getColorForValue(value);
+                  icon['fillOpacity'] = isNoData ? 0.5 : 0.6;
+                  icon['scale'] = isNoData ? 4 : 8;
+               }
+               else {
+                  icon['scale'] = 0;
+               }
+               marker.setOptions({ icon : icon });
+            });
+         });
+
+         // initialize the DateAxis, Grapher, and PlotContainer
+         globalTimeRange = dataManager.getGlobalTimeRange();
+         dateAxis = new DateAxis("dateAxis", "horizontal", {"min" : globalTimeRange['min'], "max" : globalTimeRange['max']});
+         dateAxis.addAxisChangeListener(function(cursorChangeEvent) {
+            // set the animation time here so that the user can click the plot to affect the animation playback position
+            t = cursorChangeEvent['cursorPosition'];
+            displayAnimationTime(t);
+
+            // notify the data manager of the axis change
+            dataManager.setTimeRange({
+                                        "min" : cursorChangeEvent['min'],
+                                        "max" : cursorChangeEvent['max'],
+                                        "cursorPosition" : cursorChangeEvent['cursorPosition']
+                                     });
+
+            // auto-scale the y-axes
+            if (isAutoScaleOn) {
+               autoScaleYAxes();
+            }
+         });
+         grapher = new org.bodytrack.grapher.MultiplotGrapher(dateAxis);
+         plotContainer = new PlotContainer("pc1", false, []);
+
+         dataManager.setLatLongBounds(map.getBounds());
+
+         // build the location filters
+         buildLocationFilter();
+
+         console.log("before grapher area show");
+
+         // show the grapher area
+         $("#grapher_area").show();
+
+         // set initial sizes
+         setSizes();
+
+         // set up window resize handler
+         $(window).resize(setSizes);
+      }
+
+      function buildLocationFilter() {
+         // initialize the counts
+         $.each(LOCATION_FILTERS, function(index, name) {
+            devicesByLocationFilter[name] = {};
+            deviceCountByLocationFilter[name] = 0;
+         });
+         devicesByLocationFilter['all'] = {};
+         deviceCountByLocationFilter['all'] = 0;
+
+         // iterate over the devices, and compute the counts
+         var numDevices = 0;
+         dataManager.forEachDevice(function(deviceName, device) {
+            devicesByLocationFilter['all'][deviceName] = true;
+            deviceCountByLocationFilter['all']++;
+
+            var deviceLocationDetails = device['locationDetails'];
+            if (deviceLocationDetails == null || deviceLocationDetails.length == 0) {
+               devicesByLocationFilter['unspecified'][deviceName] = true;
+               deviceCountByLocationFilter['unspecified']++;
+            }
+            else {
+               $.each(LOCATION_FILTERS, function(index, filterName) {
+                  if (deviceLocationDetails.indexOf(filterName) >= 0) {
+                     devicesByLocationFilter[filterName][deviceName] = true;
+                     deviceCountByLocationFilter[filterName]++;
+                  }
+               });
+            }
+
+         });
+
+         // finally, populate the location filter popup menu
+         var locationFilterOptionTemplate = Handlebars.compile($("#location_filter_option_template").html());
+         var locationFilterElement = $("#locationFilter");
+         locationFilterElement.append(locationFilterOptionTemplate({name : 'all', count : deviceCountByLocationFilter['all']}));
+         $.each(LOCATION_FILTERS, function(index, filterName) {
+            var deviceCount = deviceCountByLocationFilter[filterName];
+            if (deviceCount > 0) {
+               locationFilterElement.append(locationFilterOptionTemplate({name : filterName, count : deviceCount}));
+            }
+         });
+
+         locationFilterElement.change(function() {
+            currentlySelectedLocationFilter = this.value;
+            dataManager.triggerDataChangeEvent();
+         });
+      }
+
+      function initializeMap() {
+         console.log("In init map");
+         var mapOptions = {
+            center : new google.maps.LatLng(40.45693360077979, -79.94314545501709),
+            zoom : 10,
+            mapTypeId : google.maps.MapTypeId.ROAD
+         };
+         map = new google.maps.Map(document.getElementById("mapArea"), mapOptions);
+         google.maps.event.addListener(map, 'bounds_changed', function() {
+            console.log("Map bounds changed");
+         });
+
+         // Add an idle event listener ONCE to handle map loading.
+         google.maps.event.addListenerOnce(map, 'idle', function() {
+            console.log("Map is done loading");
+            initializeMarkers();
+         });
+      }
+
+      function initializeMarkers() {
+         dataManager.forEachDevice(function(name, device) {
+            var latLong = new google.maps.LatLng(device['latitude'], device['longitude'])
+            addMarker(name, latLong, true)
+         });
+
+         // set initial cursor position--this will trigger the data change event, which will color the markers appropriately.
+         dateAxis.setCursorPosition(globalTimeRange['min']);
+      }
+      // Add a marker to the map and push to the array.
+      function addMarker(id, location, isActive) {
+         var marker = new google.maps.Marker({
+                                                position : location,
+                                                map : map,
+                                                icon : {
+                                                   path : google.maps.SymbolPath.CIRCLE,
+                                                   fillColor : '#00ff00',
+                                                   fillOpacity : 0,
+                                                   strokeColor : '#000000',
+                                                   strokeOpacity : 0,
+                                                   strokeWeight : 0,
+                                                   scale : 4 //pixels
+                                                }
+                                             });
+         google.maps.event.addListener(marker,
+                                       'click',
+                                       function() {
+                                          // if the selected marker is already selected, then remove it
+                                          if (currentlySelectedMarkers.hasOwnProperty(id)) {
+                                             setMarkerSelected(id, currentlySelectedMarkers[id], false);
+                                          }
+                                          else {
+                                             if (numCurrentlySelectedMarkers < MAX_NUM_SELECTED_MARKERS) {
+                                                setMarkerSelected(id, marker, true);
+                                             }
+                                          }
+                                       });
+
+         google.maps.event.addListener(marker,
+                                       'mouseover',
+                                       function() {
+                                          setMarkerHighlight(id, marker, true);
+                                          $("#yAxis" + id + "_channel_info_container").css("outline", "2px solid red");
+                                       });
+
+         google.maps.event.addListener(marker,
+                                       'mouseout',
+                                       function() {
+                                          setMarkerHighlight(id, marker, false);
+                                          $("#yAxis" + id + "_channel_info_container").css("outline", "none");
+                                       });
+
+         markers[id] = marker;
+      }
+
+      function setMarkerHighlight(id, marker, isHighlighted) {
+         var icon = marker.getIcon();
+         if (isHighlighted) {
+            icon['strokeColor'] = 'red';
+            icon['strokeOpacity'] = 1;
+            icon['strokeWeight'] = 2;
+         }
+         else {
+            var isCurrentlySelected = typeof currentlySelectedMarkers[id] !== 'undefined';
+            icon['strokeColor'] = isCurrentlySelected ? '#000000' : 'red';
+            icon['strokeOpacity'] = isCurrentlySelected ? 1 : 0;
+            icon['strokeWeight'] = isCurrentlySelected ? 2 : 0;
+         }
+         marker.setOptions({ icon : icon });
+      }
+
+      function setMarkerSelected(id, marker, isSelected) {
+         var icon = marker.getIcon();
+         icon['strokeOpacity'] = isSelected ? 1 : 0;
+         icon['strokeWeight'] = isSelected ? 2 : 0;
+         marker.setOptions({ icon : icon });
+
+         if (isSelected) {
+            currentlySelectedMarkers[id] = marker;
+         }
+         else {
+            delete currentlySelectedMarkers[id];
+         }
+         numCurrentlySelectedMarkers = numCurrentlySelectedMarkers + (isSelected ? 1 : -1);
+
+         // finally, add or remove the channel as appropriate
+         (isSelected) ? loadChannel(id) : removeChannel(id);
+      }
+
+      function getColorForValue(value) {
+         //return getColorHueDivergentPalette(value);
+         return 'hsl(' + getColorHue(value) + ',100%,50%)';
+      }
+
+      function getColorHue(valRaw) {
+         // clamp the value to be within the allowed range
+         var max = MAX_PARTICLES;
+         var val = Math.min(Math.max(valRaw, MIN_PARTICLES), max);
+
+         // convert the value to a bucketed percentage in the range [0,1]
+         //var numBuckets = 10;
+         //var percentage = Math.round(val / max * numBuckets) / numBuckets;
+
+         var percentage = val / max;
+         return Math.round(HSL_GREEN - (HSL_GREEN * percentage));
+      }
+
+      function getColorHueDivergentPalette(valRaw) {
+         // clamp the value to be within the allowed range
+         var max = MAX_PARTICLES;
+         var val = Math.min(Math.max(valRaw, MIN_PARTICLES), max);
+
+         return DIVERGENT_PALETTE_COLORBLIND_SAFE[Math.floor(val / (max / DIVERGENT_PALETTE_COLORBLIND_SAFE.length))];
+      }
+
+      function removeChannel(id) {
+         plotContainer.removePlot(grapher.getPlot(id));
+         grapher.removePlot(id);
+         $("#" + getYAxisElementId(id) + "_container").remove();
+         $("#" + getYAxisElementId(id) + "_color_container").remove();
+         $("#" + getYAxisElementId(id) + "_info_container").remove();
+         $("#" + getYAxisElementId(id) + "_channel_info_container").remove();
+         returnPlotColor(id);
+
+         if (numCurrentlySelectedMarkers <= 0) {
+            $("#grapherContainer").hide();
+            $("#channelInfosContainer").hide();
+            $("#axisControls").hide();
+         }
+         setSizes();
+      }
+
+      function reservePlotColor(id) {
+         var color = availablePlotColors.splice(0, 1)[0];
+         usedPlotColorsByDeviceId[id] = color;
+         return color;
+      }
+
+      function returnPlotColor(id) {
+         availablePlotColors.push(usedPlotColorsByDeviceId[id]);
+         delete usedPlotColorsByDeviceId[id];
+      }
+
+      function getYAxisElementId(id) {
+         // WARNING! This assumes that the id has no spaces and that the
+         // line below will produce a legal value for a DOM element id
+         return  "yAxis" + id;
+      }
+
+      function loadChannel(id) {
+         var device = dataManager.findByName(id);
+
+         var yAxisElementId = getYAxisElementId(id);
+         var plotColor = reservePlotColor(id);
+
+         $("#yAxes").append(yAxisTemplate({"yAxisElementId" : yAxisElementId}));
+         $("#yAxesColor").append(yAxisColorTemplate({"yAxisElementId" : yAxisElementId, color : plotColor}));
+         $("#yAxesInfo").append(yAxisInfoTemplate({"yAxisElementId" : yAxisElementId}));
+         var channelInfoBox = $(channelInfoTemplate({
+                                                       "yAxisElementId" : yAxisElementId,
+                                                       device : device,
+                                                       color : plotColor,
+                                                       maxValueTimeFormatted : moment.unix(device['maxValueTime']).format(TIMESTAMP_FORMAT)
+                                                    }));
+         $("#channelInfos").append(channelInfoBox);
+         $("#" + yAxisElementId + "_channel_info_close_button").click(function() {
+            setMarkerSelected(id, currentlySelectedMarkers[id], false)
+         });
+
+         channelInfoBox.mouseenter(
+               function() {
+                  setMarkerHighlight(id, currentlySelectedMarkers[id], true);
+               }).mouseleave(
+               function() {
+                  setMarkerHighlight(id, currentlySelectedMarkers[id], false);
+               });
+
+         var channelDatasource = dataManager.getChannelDatasource(id);
+         var channel = {
+            "min" : device['minValue'],
+            "max" : device['maxValue'],
+            "time_type" : "utc",
+            "style" : {
+               "styles" : [
+                  {"type" : "line", "lineWidth" : 1, "show" : true, color : plotColor}
+               ],
+               highlight : {
+                  "lineWidth" : 1,
+                  "styles" : [
+                     {
+                        "type" : "lollipop",
+                        "color" : "#000000",
+                        "radius" : 1,
+                        "lineWidth" : 1,
+                        "fill" : false
+                     },
+                     {
+                        "show" : true,
+                        "type" : "value",
+                        "fillColor" : "#000000",
+                        "marginWidth" : 10,
+                        "font" : "7pt Helvetica,Arial,Verdana,sans-serif",
+                        "verticalOffset" : 7,
+                        "numberFormat" : "###,##0"
+                     }
+                  ]
+               }
+            }
+         };
+         grapher.addPlot(id, channel, channelDatasource, yAxisElementId);
+         grapher.addDataPointListener(id, displayTimeForDataPoint);
+         grapher.addDataPointListener(id, function(val) {
+            displayValueForDataPoint(id, val ? val['value'] : null);
+         });
+         plotContainer.addPlot(grapher.getPlot(id));
+
+         $("#grapherContainer").show();
+         $("#channelInfosContainer").show();
+         $("#axisControls").show();
+
+         setSizes();
+      }
+
+      function displayValueForDataPoint(id, val) {
+         var yAxisElementId = getYAxisElementId(id);
+         if (val) {
+            $("#" + yAxisElementId + "_valueLabelText").show().html(val);
+            $("#" + yAxisElementId + "_valueLabelColor").show().css('background-color', getColorForValue(val));
+         }
+         else {
+            $("#" + yAxisElementId + "_valueLabelText").hide();
+            $("#" + yAxisElementId + "_valueLabelColor").hide();
+         }
+      }
+
+      function displayTimeForDataPoint(val) {
+         $("#timeLabel").html(val ? moment.unix(val['date']).format(TIMESTAMP_FORMAT) : "");
+      }
+
+      function displayAnimationTime(val) {
+         $("#animationTimeLabel").html(val ? moment.unix(val).format(TIMESTAMP_FORMAT) : "");
+      }
+
+      function setSizes() {
+         var axisControlsWidth = $("#axisControls").is(":visible") ? $("#axisControls").width() : 0;
+         var animationControlsWidth = $("#animationControls").width();
+         var titleAndLegendAreaWidth = $("#titleAndLegendArea").width();
+         var yAxisTableContainerWidth = $("#yAxesTableContainer").width();
+         var plotContainerWidth = $(window).width() - 20 - Math.max(axisControlsWidth,
+                                                                    Math.max(yAxisTableContainerWidth,
+                                                                             Math.max(animationControlsWidth, titleAndLegendAreaWidth))) - 2;
+         var plotContainerHeight = $("#column0").height() - 2;
+
+         // resize date axis, plot container, and y axes
+         dateAxis.setSize(plotContainerWidth, $("#dateAxis").height(), SequenceNumber.getNext());
+         plotContainer.setSize(plotContainerWidth, plotContainerHeight, SequenceNumber.getNext());
+         grapher.updateYAxesSizes();
+         $(".channelInfo").width((plotContainerWidth) / MAX_NUM_SELECTED_MARKERS);
+      }
+
+      function jumpToTime(time) {
+         var dateAxisHalfRange = (dateAxis.getMax() - dateAxis.getMin()) / 2;
+         dateAxis.setCursorPosition(time);
+         dateAxis.setRange(time - dateAxisHalfRange, time + dateAxisHalfRange);
+      }
+
+      function play() {
+         if (!isPlaying) {
+            isPlaying = true;
+            t = dateAxis.getCursorPosition();
+            if (t >= dateAxis.getMax()) {
+               t = dateAxis.getMin();
+            }
+            $("#playButton").val("Stop");
+            computeAndRenderNextGeneration();
+         }
+         else {
+            isPlaying = false;
+            $("#playButton").val("Play");
+            window.clearTimeout(timeoutHandle);
+            timeoutHandle = null;
+         }
+      }
+
+      function computeAndRenderNextGeneration() {
+         if (t < dateAxis.getMax()) {
+            t += 60; // step is always 1 minute, which is 60 seconds
+            if (t < dateAxis.getMax()) {
+               dateAxis.setCursorPosition(t);
+            }
+            else {
+               dateAxis.setCursorPosition(dateAxis.getMax());
+               play();
+            }
+         }
+         else {
+            dateAxis.setCursorPosition(dateAxis.getMax());
+            play();
+         }
+
+         if (isPlaying) {
+            window.clearTimeout(timeoutHandle);
+            timeoutHandle = window.setTimeout(computeAndRenderNextGeneration, $("#animationIntervalMillis").val());
+         }
+      }
+
+      function resetDateAxis() {
+         dateAxis.setRange(globalTimeRange['min'], globalTimeRange['max']);
+      }
+
+      function unifyYAxes() {
+         var min = Number.MAX_VALUE;
+         var max = Number.MIN_VALUE;
+         grapher.forEachPlot(function(plot) {
+            var stats = plot.getStatistics(dateAxis.getMin(), dateAxis.getMax());
+            min = Math.min(min, stats['y_min']);
+            max = Math.max(max, stats['y_max']);
+         });
+
+         var paddedRange = paddedYAxisRange(min, max);
+
+         grapher.forEachPlot(function(plot, yAxis) {
+            yAxis.setRange(paddedRange['min'], paddedRange['max']);
+         });
+      }
+
+      function autoScaleYAxes() {
+         grapher.forEachPlot(function(plot, yAxis) {
+            var stats = plot.getStatistics(dateAxis.getMin(), dateAxis.getMax());
+            var paddedRange = paddedYAxisRange(stats['y_min'], stats['y_max']);
+            yAxis.setRange(paddedRange['min'], paddedRange['max']);
+         });
+      }
+
+      function autoScaleLockChange() {
+         isAutoScaleOn = $("#autoScaleLockCheckbox").is(":checked");
+         if (isAutoScaleOn) {
+            $("#autoScaleYAxesButton").attr("disabled", "disabled");
+         }
+         else {
+            $("#autoScaleYAxesButton").removeAttr("disabled");
+         }
+      }
+
+      function paddedYAxisRange(min, max) {
+         var yDiff = max - min;
+         var padding = 0.5;
+         if (yDiff < 1e-10) {
+            padding = 0.5;
+         }
+         else {
+            padding = 0.05 * yDiff;
+         }
+         return {min : min - padding, max : max + padding}
+      }
+
+      function removeAllSelections() {
+         for (var id in currentlySelectedMarkers) {
+            var marker = currentlySelectedMarkers[id];
+            setMarkerSelected(id, marker, false);
+         }
+      }
+   </script>
+
+   <script id="location_filter_option_template" type="text/x-handlebars-template">
+      <option value="{{name}}">{{name}} ({{count}})</option>
+   </script>
+
+   <script id="y_axis_template" type="text/x-handlebars-template">
+      <td id="{{yAxisElementId}}_container" class="axisCell">
+         <div class="yAxisContainer">
+            <div id="{{yAxisElementId}}" class="yAxis"></div>
+         </div>
+      </td>
+   </script>
+
+   <script id="y_axis_color_template" type="text/x-handlebars-template">
+      <td id="{{yAxisElementId}}_color_container">
+         <div class="yAxisColor" style="background-color:{{color}}"></div>
+      </td>
+   </script>
+
+   <script id="y_axis_info_template" type="text/x-handlebars-template">
+      <td id="{{yAxisElementId}}_info_container">
+         <table border="0" cellpadding="0" cellspacing="0" align="right">
+            <tr>
+               <td>
+                  <div id="{{yAxisElementId}}_valueLabelText" class="valueLabelText"></div>
+               </td>
+               <td>
+                  <div id="{{yAxisElementId}}_valueLabelColor" class="valueLabelColor"></div>
+               </td>
+            </tr>
+         </table>
+      </td>
+   </script>
+
+   <script id="channel_info_template" type="text/x-handlebars-template">
+      <div id="{{yAxisElementId}}_channel_info_container" class="channelInfo">
+         <div class="yAxisColor" style="background-color:{{color}};border-right:none"></div>
+         <div id="{{yAxisElementId}}_channel_info_close_button" class="closeButton" style="float:right;margin-right:3px"></div>
+         <div class="deviceName" style="margin-left:3px"><b>Speck {{device.prettyName}}</b></div>
+         <div style="padding:3px">
+            <table border="0" cellpadding="0" cellspacing="0" align="center">
+               <tr>
+                  <th class="channelInfoLabel">Max</th>
+               </tr>
+               <tr align="center">
+                  <td><a href="#" onclick="jumpToTime({{device.maxValueTime}}); return false;">{{device.maxValue}}</a></td>
+               </tr>
+               <tr align="center">
+                  <td><a href="#" onclick="jumpToTime({{device.maxValueTime}}); return false;">{{maxValueTimeFormatted}}</a></td>
+               </tr>
+            </table>
+         </div>
+      </div>
+   </script>
+</head>
+<body>
+<div id="loading_panel">Loading...</div>
+<div id="main_panel">
+   <div id="grapher_area" class="textSelectionDisabled">
+      <table id="grapher" border="0" cellpadding="0" cellspacing="0">
+         <tr valign="top">
+            <td width="400" rowspan="2">
+               <div id="mapArea">Map goes here</div>
+            </td>
+            <td id="titleAndLegendArea">
+               <div class="title-text">In-Home Speck Test</div>
+               <div>
+                  <p>
+                     We loaned 65 Specks to members of the CMU SCS community to put in their homes for five days. The Specks
+                     recorded samples once per minute. The colored dots on the map represent the values recorded. Actual
+                     locations have been modified for privacy.
+                  </p>
+                  <p>
+                     Click on a dot to show/hide the plot for that location. You may select up to five at a time to compare.
+                     Click on the date range to jump to a particular time. Drag the red triangular cursor on the date
+                     range to animate the values, or click on the Play button below. You can scroll on the date axis or
+                     y-axes to zoom the plots.
+                  </p>
+               </div>
+            </td>
+         </tr>
+         <tr valign="bottom">
+            <td id="animationControls">
+               <table border="0" cellpadding="0" cellspacing="0" style="">
+                  <tr>
+                     <td><input id="playButton" type="button" onclick="play()" value="Play" style="margin-right:2px"></td>
+                     <td>
+                        <select id="animationIntervalMillis">
+                           <option value="1000">60x</option>
+                           <option value="600">100x</option>
+                           <option value="300">200x</option>
+                           <option value="200">300x</option>
+                           <option value="120">500x</option>
+                           <option value="60" selected="selected">1000x</option>
+                           <option value="6">10000x</option>
+                        </select>
+                     </td>
+                     <td>
+                        <span style="font-size: smaller;margin-left:10px;">Show:</span>
+                        <select id="locationFilter"></select>
+                     </td>
+                  </tr>
+               </table>
+            </td>
+         </tr>
+         <tr>
+            <td width="400">
+               <div id="dateAxisContainer">
+                  <div id="dateAxis"></div>
+               </div>
+            </td>
+            <td valign="top">
+               <div style="position:relative; height: 50px;min-height: 50px;max-height: 50px;margin:5px 0 5px 5px;">
+                  <div style="position:absolute; top:0;">
+                     <div id="animationTimeLabel" style="float:left"></div>
+                     <input id="resetDateAxisButton" type="button" onclick="resetDateAxis()" value="Reset Time Range" style="margin-left:10px;">
+                  </div>
+                  <div id="axisControls" style="position:absolute;bottom:0;display:none;font-size: smaller">
+                     <input id="unifyYAxesButton" type="button" onclick="unifyYAxes()" value="Unify Y-Axis Ranges">
+                     <input id="autoScaleYAxesButton" type="button" onclick="autoScaleYAxes()" value="Fit Plot(s)" style="margin-left: 10px">
+                     <input id="autoScaleLockCheckbox" name="autoScaleLockCheckbox" type="checkbox" onchange="autoScaleLockChange()" value="true"><label for="autoScaleLockCheckbox">Auto fit</label>
+                  </div>
+               </div>
+            </td>
+         </tr>
+         <tr id="grapherContainer" style="display:none">
+            <td width="400" id="column0">
+               <div id="plotContainer1" class="plotContainer">
+                  <div id="pc1" class="plot"></div>
+               </div>
+            </td>
+            <td rowspan="2" valign="top" id="yAxesTableContainer">
+               <table id="yAxesTable" border="0" cellpadding="0" cellspacing="0">
+                  <tr id="yAxes"></tr>
+                  <tr id="yAxesColor"></tr>
+                  <tr id="yAxesInfo"></tr>
+               </table>
+               <div id="timeLabel"></div>
+            </td>
+         </tr>
+         <tr id="channelInfosContainer" valign="top" style="display:none">
+            <td>
+               <div id="channelInfos" style="display: table-row"></div>
+               <input id="removeAllSelectionsButton" type="button" onclick="removeAllSelections()" value="Remove All" style="margin-top:5px">
+            </td>
+         </tr>
+      </table>
+   </div>
+</div>
+</body>
+</html>

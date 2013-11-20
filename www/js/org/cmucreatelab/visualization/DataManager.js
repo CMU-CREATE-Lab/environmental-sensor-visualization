@@ -93,12 +93,16 @@ else {
                // TODO: Maybe someday filter the set of devices based on time range
             }
             else if (hasTimeCursorChanged) {
-               // publish event, including the current channel values
-               var changeEvent = createDataChangeEvent();
-               for (var i = 0; i < dataChangeListeners.length; i++) {
-                  dataChangeListeners[i](changeEvent);
-               }
+               this.triggerDataChangeEvent();
             }
+         }
+      };
+
+      this.triggerDataChangeEvent = function() {
+         // publish event, including the current channel values
+         var changeEvent = createDataChangeEvent();
+         for (var i = 0; i < dataChangeListeners.length; i++) {
+            dataChangeListeners[i](changeEvent);
          }
       };
 

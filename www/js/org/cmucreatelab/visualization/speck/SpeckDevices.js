@@ -80,6 +80,11 @@ if (!org.cmucreatelab.util.Arrays) {
       var globalMaxTime = 0;
       var devicesByName = {};
 
+      var _clampTimeToInterval = function(device, t) {
+         return t - (t % device['valueInterval'])
+      };
+      this.clampTimeToInterval = _clampTimeToInterval;
+
       // The "constructor"
       (function() {
          var dataView = new DataView(dataArrayBuffer);
@@ -117,7 +122,7 @@ if (!org.cmucreatelab.util.Arrays) {
             var endingByte = startingByte + (device['numRecords'] * recordSize);
             //console.log("Bytes [" + startingByte + "] - [" + endingByte + "]");
             for (var j = startingByte; j < endingByte; j += recordSize) {
-               device['times'][idx] = dataView.getInt32(j);
+               device['times'][idx] = _clampTimeToInterval(device, dataView.getInt32(j));
                device['values'][idx] = dataView.getInt32(j + Int32Array.BYTES_PER_ELEMENT);
                idx++;
             }
@@ -140,10 +145,6 @@ if (!org.cmucreatelab.util.Arrays) {
 
       this.findByName = function(name) {
          return devicesByName[name];
-      }
-
-      this.clampTimeToInterval = function(device, t) {
-         return t - (t % device['valueInterval'])
       }
 
       this.getValueAtTime = function(device, timeInSecs) {
