@@ -597,6 +597,7 @@
       function autoScaleLockChange() {
          isAutoScaleOn = $("#autoScaleLockCheckbox").is(":checked");
          if (isAutoScaleOn) {
+            autoScaleYAxes();
             $("#autoScaleYAxesButton").attr("disabled", "disabled");
          }
          else {
