@@ -69,10 +69,6 @@ else {
          throw 'XMLHttpRequest is not supported by this browser';
       }
       var request = new XMLHttpRequest();
-      if (typeof request.responseType === 'undefined') {
-         throw 'The XMLHttpRequest implementation in this browser does not support binary files';
-      }
-      request.responseType = "arraybuffer";
 
       // don't even bother checking the response if there are no callbacks defined
       if (callbacks) {
@@ -97,6 +93,10 @@ else {
          };
       }
       request.open('GET', url, true);
+      if (typeof request.responseType === 'undefined') {
+         throw 'The XMLHttpRequest implementation in this browser does not support binary files';
+      }
+      request.responseType = "arraybuffer";
       request.send(null);
    }
 })();
