@@ -155,19 +155,15 @@
 
          // configure the DataManager
          dataManager.addDataChangeListener(function(valuesMap) {
-            $.each(valuesMap, function(name, value) {
+            // Only update the ones which pass the filter.  Visibility is handled in the filter change handler.
+            $.each(devicesByLocationFilter[currentlySelectedLocationFilter], function(name) {
+               var value = valuesMap[name];
                var marker = markers[name];
                var icon = marker.getIcon();
                var isNoData = (value === null);
-               var isVisible = typeof devicesByLocationFilter[currentlySelectedLocationFilter][name] !== 'undefined';
-               if (isVisible) {
-                  icon['fillColor'] = isNoData ? "#666666" : getColorForValue(value);
-                  icon['fillOpacity'] = isNoData ? 0.5 : 0.6;
-                  icon['scale'] = isNoData ? 4 : 8;
-               }
-               else {
-                  icon['scale'] = 0;
-               }
+               icon['fillColor'] = isNoData ? "#666666" : getColorForValue(value);
+               icon['fillOpacity'] = isNoData ? 0.5 : 0.6;
+               icon['scale'] = isNoData ? 4 : 8;
                marker.setOptions({ icon : icon });
             });
          });
@@ -266,6 +262,17 @@
 
          locationFilterElement.change(function() {
             currentlySelectedLocationFilter = this.value;
+
+            // Need to set visibility for each device.  The coloring will get
+            // done by triggering the data change event below.
+            dataManager.forEachDevice(function(name){
+               var marker = markers[name];
+               var icon = marker.getIcon();
+               var isVisible = typeof devicesByLocationFilter[currentlySelectedLocationFilter][name] !== 'undefined';
+               icon['scale'] = isVisible ? 4 : 0;
+               marker.setOptions({ icon : icon });
+            });
+
             dataManager.triggerDataChangeEvent();
          });
       }
