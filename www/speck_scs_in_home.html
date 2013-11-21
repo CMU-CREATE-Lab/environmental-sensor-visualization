@@ -4,8 +4,16 @@
    <title>Speck SCS In Home Test</title>
    <link href="css/main.css" rel="stylesheet">
    <style type="text/css">
-      .title-text {
-         font-size: 16pt;
+      .normalSizeText {
+         font-size: 9pt !important;
+      }
+
+      a {
+         text-decoration: none;
+      }
+
+      .titleText {
+         font-size: 14pt;
          font-weight: bold;
          text-align: center;
       }
@@ -17,7 +25,17 @@
       }
 
       #animationControls {
-         padding: 0 5px 5px 5px;
+         padding: 0 0 5px 10px;
+         width: 350px;
+         max-width: 350px;
+         border-bottom: 1px solid black;
+      }
+
+      #paletteCanvas {
+         margin-top: 5px;
+         width: 338px;
+         height: 25px;
+         border: 1px solid black;
       }
    </style>
    <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCGR21nG0gjPnQZtlCbPIxpDcJ2T2fOrf8&sensor=false"></script>
@@ -39,13 +57,17 @@
       var TIMESTAMP_FORMAT_SHORT = "HH:mm:ss";
 
       var MIN_PARTICLES = 0;
-      var MAX_PARTICLES = 800;
+      var maxParticles = 1000;
+
       var HSL_RED = 0;
       var HSL_GREEN = 120;
 
       // Got these divergent palettes from http://colorbrewer2.org/
       var DIVERGENT_PALETTE = [ "#006837", "#1A9850", "#66BD63", "#A6D96A", "#D9EF8B", "#FFFFBF", "#FEE08B", "#FDAE61", "#F46D43", "#D73027", "#A50026" ];
       var DIVERGENT_PALETTE_COLORBLIND_SAFE = ["#313695", "#4575B4", "#74ADD1", "#ABD9E9", "#E0F3F8", "#FFFFBF", "#FEE090", "#FDAE61", "#F46D43", "#D73027", "#A50026"];
+
+      var paletteCanvasContext = null;
+      var paletteId = 11;
 
       var dataManager = null;
 
@@ -131,9 +153,6 @@
          yAxisColorTemplate = Handlebars.compile($("#y_axis_color_template").html());
          yAxisInfoTemplate = Handlebars.compile($("#y_axis_info_template").html());
 
-         // create the legend
-         // TODO
-
          // configure the DataManager
          dataManager.addDataChangeListener(function(valuesMap) {
             $.each(valuesMap, function(name, value) {
@@ -181,6 +200,17 @@
          // build the location filters
          buildLocationFilter();
 
+         var paletteCanvas = $("#paletteCanvas");
+         var paletteCanvasElem = paletteCanvas.get(0);
+         paletteCanvasElem.width = paletteCanvas.width();
+         paletteCanvasElem.style.width = paletteCanvas.width() + "px";
+         paletteCanvasElem.height = paletteCanvas.height();
+         paletteCanvasElem.style.height = paletteCanvas.height() + "px";
+         paletteCanvasContext = paletteCanvasElem.getContext("2d");
+         paletteCanvasContext.scale(1, 1);
+
+         renderPalette();
+
          console.log("before grapher area show");
 
          // show the grapher area
@@ -203,7 +233,6 @@
          deviceCountByLocationFilter['all'] = 0;
 
          // iterate over the devices, and compute the counts
-         var numDevices = 0;
          dataManager.forEachDevice(function(deviceName, device) {
             devicesByLocationFilter['all'][deviceName] = true;
             deviceCountByLocationFilter['all']++;
@@ -241,6 +270,24 @@
          });
       }
 
+      function renderPalette() {
+         var paletteCanvas = $("#paletteCanvas");
+         var pixelWidth = paletteCanvas.width();
+         var pixelHeight = paletteCanvas.height();
+         paletteCanvasContext.clearRect(0, 0, pixelWidth, pixelHeight);
+
+         for (var x = 0; x <= pixelWidth; x = x + 1) {
+            var particlesValue = x / pixelWidth * maxParticles;
+            var color = getColorForValue(particlesValue);
+            paletteCanvasContext.lineWidth = 1;
+            paletteCanvasContext.strokeStyle = color;
+            paletteCanvasContext.beginPath();
+            paletteCanvasContext.moveTo(x - 0.5, 0);
+            paletteCanvasContext.lineTo(x - 0.5, pixelHeight);
+            paletteCanvasContext.stroke();
+         }
+      }
+
       function initializeMap() {
          console.log("In init map");
          var mapOptions = {
@@ -263,14 +310,15 @@
       function initializeMarkers() {
          dataManager.forEachDevice(function(name, device) {
             var latLong = new google.maps.LatLng(device['latitude'], device['longitude'])
-            addMarker(name, latLong, true)
+            addMarker(name, latLong);
          });
 
          // set initial cursor position--this will trigger the data change event, which will color the markers appropriately.
-         dateAxis.setCursorPosition(globalTimeRange['min']);
+         dateAxis.setCursorPosition((globalTimeRange['min'] + globalTimeRange['max']) / 2);
       }
+
       // Add a marker to the map and push to the array.
-      function addMarker(id, location, isActive) {
+      function addMarker(id, location) {
          var marker = new google.maps.Marker({
                                                 position : location,
                                                 map : map,
@@ -350,29 +398,35 @@
       }
 
       function getColorForValue(value) {
-         //return getColorHueDivergentPalette(value);
+         if (paletteId == 2) {
+            return getColorHueDivergentPalette(value, DIVERGENT_PALETTE);
+         }
+         else if (paletteId == 3) {
+            return getColorHueDivergentPalette(value, DIVERGENT_PALETTE_COLORBLIND_SAFE);
+         }
+
          return 'hsl(' + getColorHue(value) + ',100%,50%)';
       }
 
       function getColorHue(valRaw) {
          // clamp the value to be within the allowed range
-         var max = MAX_PARTICLES;
-         var val = Math.min(Math.max(valRaw, MIN_PARTICLES), max);
+         var val = Math.min(Math.max(valRaw, MIN_PARTICLES), maxParticles);
 
-         // convert the value to a bucketed percentage in the range [0,1]
-         //var numBuckets = 10;
-         //var percentage = Math.round(val / max * numBuckets) / numBuckets;
+         var numBuckets = paletteId;
+         var percentage = val / maxParticles;   // convert to [0,1]
+         if (numBuckets > 0) {
+            var bucketIndex = Math.min(numBuckets - 1, Math.floor(percentage * numBuckets));
+            percentage = bucketIndex / (numBuckets - 1);
+         }
 
-         var percentage = val / max;
          return Math.round(HSL_GREEN - (HSL_GREEN * percentage));
       }
 
-      function getColorHueDivergentPalette(valRaw) {
+      function getColorHueDivergentPalette(valRaw, palette) {
          // clamp the value to be within the allowed range
-         var max = MAX_PARTICLES;
-         var val = Math.min(Math.max(valRaw, MIN_PARTICLES), max);
-
-         return DIVERGENT_PALETTE_COLORBLIND_SAFE[Math.floor(val / (max / DIVERGENT_PALETTE_COLORBLIND_SAFE.length))];
+         var val = Math.min(Math.max(valRaw, MIN_PARTICLES), maxParticles);
+         var percentage = val / maxParticles;
+         return palette[ Math.floor(percentage * (palette.length - 1))];
       }
 
       function removeChannel(id) {
@@ -422,7 +476,8 @@
                                                        "yAxisElementId" : yAxisElementId,
                                                        device : device,
                                                        color : plotColor,
-                                                       maxValueTimeFormatted : moment.unix(device['maxValueTime']).format(TIMESTAMP_FORMAT)
+                                                       maxValueTimeFormatted : moment.unix(device['maxValueTime']).format(TIMESTAMP_FORMAT),
+                                                       locationDetails : device['locationDetails'].replace(/\//g, ", ")
                                                     }));
          $("#channelInfos").append(channelInfoBox);
          $("#" + yAxisElementId + "_channel_info_close_button").click(function() {
@@ -623,6 +678,18 @@
             setMarkerSelected(id, marker, false);
          }
       }
+
+      function changePalette() {
+         paletteId = $("#paletteChooser").val();
+         renderPalette();
+         dataManager.triggerDataChangeEvent();
+      }
+
+      function changeMaxParticles() {
+         maxParticles = $("#maxParticlesChooser").val();
+         renderPalette();
+         dataManager.triggerDataChangeEvent();
+      }
    </script>
 
    <script id="location_filter_option_template" type="text/x-handlebars-template">
@@ -664,17 +731,19 @@
          <div id="{{yAxisElementId}}_channel_info_close_button" class="closeButton" style="float:right;margin-right:3px"></div>
          <div class="deviceName" style="margin-left:3px"><b>Speck {{device.prettyName}}</b></div>
          <div style="padding:3px">
-            <table border="0" cellpadding="0" cellspacing="0" align="center">
-               <tr>
-                  <th class="channelInfoLabel">Max</th>
-               </tr>
-               <tr align="center">
-                  <td><a href="#" onclick="jumpToTime({{device.maxValueTime}}); return false;">{{device.maxValue}}</a></td>
-               </tr>
-               <tr align="center">
-                  <td><a href="#" onclick="jumpToTime({{device.maxValueTime}}); return false;">{{maxValueTimeFormatted}}</a></td>
+            <table border="0" cellpadding="0" cellspacing="0">
+               <tr valign="top">
+                  <td class="channelInfoLabel">Max:</td>
+                  <td>&nbsp;</td>
+                  <td>
+                     <a href="#" onclick="jumpToTime({{device.maxValueTime}}); return false;">{{device.maxValue}}</a> at<br>
+                     <a href="#" onclick="jumpToTime({{device.maxValueTime}}); return false;">{{maxValueTimeFormatted}}</a>
+                  </td>
                </tr>
             </table>
+            <div style="border-top: 1px solid black; margin-top:3px;">
+               {{locationDetails}}
+            </div>
          </div>
       </div>
    </script>
@@ -686,11 +755,11 @@
       <table id="grapher" border="0" cellpadding="0" cellspacing="0">
          <tr valign="top">
             <td width="400" rowspan="2">
-               <div id="mapArea">Map goes here</div>
+               <div id="mapArea"></div>
             </td>
             <td id="titleAndLegendArea">
-               <div class="title-text">In-Home Speck Test</div>
-               <div>
+               <div class="titleText">In-Home Speck Test</div>
+               <div class="normalSizeText">
                   <p>
                      We loaned 65 Specks to members of the CMU SCS community to put in their homes for five days. The Specks
                      recorded samples once per minute. The colored dots on the map represent the values recorded. Actual
@@ -703,14 +772,55 @@
                      y-axes to zoom the plots.
                   </p>
                </div>
+               <div style="border-top:1px solid black;border-bottom:1px solid black;padding: 10px 0 10px 0;">
+                  <table border="0" cellpadding="0" cellspacing="0" style="width:340px">
+                     <tr>
+                        <td colspan="2" style="font-size:10pt;" align="center">Particle Count Range</td>
+                     </tr>
+                     <tr>
+                        <td class="normalSizeText">Min: 0</td>
+                        <td class="normalSizeText" align="right">
+                           Max:
+                           <select id="maxParticlesChooser" onchange="changeMaxParticles()">
+                              <option value="500">500</option>
+                              <option value="750">750</option>
+                              <option value="1000" selected="selected">1000</option>
+                              <option value="2000">2000</option>
+                              <option value="3000">3000</option>
+                              <option value="4000">4000</option>
+                              <option value="5000">5000</option>
+                              <option value="5000">5000</option>
+                              <option value="6000">6000</option>
+                              <option value="7000">7000</option>
+                              <option value="8000">8000</option>
+                              <option value="9000">9000</option>
+                              <option value="10000">10000</option>
+                           </select>
+                        </td>
+                     </tr>
+                  </table>
+                  <canvas id="paletteCanvas"></canvas>
+                  <div class="normalSizeText">
+                     Palette:
+                     <select id="paletteChooser" onchange="changePalette()">
+                        <option value="-1">Green - Red, Smooth Gradient</option>
+                        <option value="5">Green - Red, Bucketed 5</option>
+                        <option value="7">Green - Red, Bucketed 7</option>
+                        <option value="9">Green - Red, Bucketed 9</option>
+                        <option value="11" selected="selected">Green - Red, Bucketed 11</option>
+                        <option value="2">Divergent</option>
+                        <option value="3">Divergent (Colorblind Safe)</option>
+                     </select>
+                  </div>
+               </div>
             </td>
          </tr>
          <tr valign="bottom">
             <td id="animationControls">
-               <table border="0" cellpadding="0" cellspacing="0" style="">
+               <table border="0" cellpadding="0" cellspacing="0" style="width:340px">
                   <tr>
-                     <td><input id="playButton" type="button" onclick="play()" value="Play" style="margin-right:2px"></td>
                      <td>
+                        <input id="playButton" type="button" onclick="play()" value="Play" style="margin-right:2px">
                         <select id="animationIntervalMillis">
                            <option value="1000">60x</option>
                            <option value="600">100x</option>
@@ -721,8 +831,8 @@
                            <option value="6">10000x</option>
                         </select>
                      </td>
-                     <td>
-                        <span style="font-size: smaller;margin-left:10px;">Show:</span>
+                     <td align="right">
+                        <span class="normalSizeText" style="margin-left:10px;">Show:</span>
                         <select id="locationFilter"></select>
                      </td>
                   </tr>
@@ -738,13 +848,13 @@
             <td valign="top">
                <div style="position:relative; height: 50px;min-height: 50px;max-height: 50px;margin:5px 0 5px 5px;">
                   <div style="position:absolute; top:0;">
-                     <div id="animationTimeLabel" style="float:left"></div>
+                     <div id="animationTimeLabel" class="normalSizeText" style="float:left; color:black;margin-top: 2px"></div>
                      <input id="resetDateAxisButton" type="button" onclick="resetDateAxis()" value="Reset Time Range" style="margin-left:10px;">
                   </div>
-                  <div id="axisControls" style="position:absolute;bottom:0;display:none;font-size: smaller">
+                  <div id="axisControls" style="position:absolute;bottom:0;display:none;">
                      <input id="unifyYAxesButton" type="button" onclick="unifyYAxes()" value="Unify Y-Axis Ranges">
                      <input id="autoScaleYAxesButton" type="button" onclick="autoScaleYAxes()" value="Fit Plot(s)" style="margin-left: 10px">
-                     <input id="autoScaleLockCheckbox" name="autoScaleLockCheckbox" type="checkbox" onchange="autoScaleLockChange()" value="true"><label for="autoScaleLockCheckbox">Auto fit</label>
+                     <input id="autoScaleLockCheckbox" name="autoScaleLockCheckbox" type="checkbox" onchange="autoScaleLockChange()" value="true"><label class="normalSizeText" for="autoScaleLockCheckbox">Auto fit</label>
                   </div>
                </div>
             </td>
