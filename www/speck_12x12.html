@@ -41,7 +41,7 @@
          left: 5px;
          min-width: 130px;
          text-align: left;
-         margin:0;
+         margin: 0;
       }
 
       #axisControls {
@@ -73,6 +73,13 @@
          cursor: pointer;
          text-align: center;
       }
+
+      #paletteCanvas {
+         margin-top: 5px;
+         width: 273px;
+         height: 25px;
+         border: 1px solid black;
+      }
    </style>
    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
    <script src="lib/handlebars.js"></script>
@@ -97,13 +104,17 @@
       var TIMESTAMP_FORMAT_SHORT = "HH:mm:ss";
 
       var MIN_PARTICLES = 0;
-      var MAX_PARTICLES = 5000;
+      var maxParticles = 4000;
+
       var HSL_RED = 0;
       var HSL_GREEN = 120;
 
       // Got these divergent palettes from http://colorbrewer2.org/
       var DIVERGENT_PALETTE = [ "#006837", "#1A9850", "#66BD63", "#A6D96A", "#D9EF8B", "#FFFFBF", "#FEE08B", "#FDAE61", "#F46D43", "#D73027", "#A50026" ];
       var DIVERGENT_PALETTE_COLORBLIND_SAFE = ["#313695", "#4575B4", "#74ADD1", "#ABD9E9", "#E0F3F8", "#FFFFBF", "#FEE090", "#FDAE61", "#F46D43", "#D73027", "#A50026"];
+
+      var paletteCanvasContext = null;
+      var paletteId = 11;
 
       var deviceNameGrid = [];
 
@@ -257,6 +268,17 @@
          timespanPlotContainer = new PlotContainer("timespanPlot", false, []);
 
          initializeAnnotations();
+
+         var paletteCanvas = $("#paletteCanvas");
+         var paletteCanvasElem = paletteCanvas.get(0);
+         paletteCanvasElem.width = paletteCanvas.width();
+         paletteCanvasElem.style.width = paletteCanvas.width() + "px";
+         paletteCanvasElem.height = paletteCanvas.height();
+         paletteCanvasElem.style.height = paletteCanvas.height() + "px";
+         paletteCanvasContext = paletteCanvasElem.getContext("2d");
+         paletteCanvasContext.scale(1, 1);
+
+         renderPalette();
 
          // show the grapher area
          $("#grapher_area").show();
@@ -492,6 +514,24 @@
          setSizes();
       }
 
+      function renderPalette() {
+         var paletteCanvas = $("#paletteCanvas");
+         var pixelWidth = paletteCanvas.width();
+         var pixelHeight = paletteCanvas.height();
+         paletteCanvasContext.clearRect(0, 0, pixelWidth, pixelHeight);
+
+         for (var x = 0; x <= pixelWidth; x = x + 1) {
+            var particlesValue = x / pixelWidth * maxParticles;
+            var color = getColorForValue(particlesValue);
+            paletteCanvasContext.lineWidth = 1;
+            paletteCanvasContext.strokeStyle = color;
+            paletteCanvasContext.beginPath();
+            paletteCanvasContext.moveTo(x - 0.5, 0);
+            paletteCanvasContext.lineTo(x - 0.5, pixelHeight);
+            paletteCanvasContext.stroke();
+         }
+      }
+
       function setCellSelected(id, cell, isSelected) {
          cell.css("outline", isSelected ? "2px solid black" : "none")
 
@@ -508,29 +548,35 @@
       }
 
       function getColorForValue(value) {
+         if (paletteId == 2) {
+            return getColorHueDivergentPalette(value, DIVERGENT_PALETTE);
+         }
+         else if (paletteId == 3) {
+            return getColorHueDivergentPalette(value, DIVERGENT_PALETTE_COLORBLIND_SAFE);
+         }
+
          return 'hsl(' + getColorHue(value) + ',100%,50%)';
-         //return getColorHueDivergentPalette(value);
       }
 
       function getColorHue(valRaw) {
          // clamp the value to be within the allowed range
-         var max = 3000;
-         var val = Math.min(Math.max(valRaw, MIN_PARTICLES), max);
+         var val = Math.min(Math.max(valRaw, MIN_PARTICLES), maxParticles);
 
-         // convert the value to a bucketed percentage in the range [0,1]
-         //var numBuckets = 10;
-         //var percentage = Math.round(val / max * numBuckets) / numBuckets;
+         var numBuckets = paletteId;
+         var percentage = val / maxParticles;   // convert to [0,1]
+         if (numBuckets > 0) {
+            var bucketIndex = Math.min(numBuckets - 1, Math.floor(percentage * numBuckets));
+            percentage = bucketIndex / (numBuckets - 1);
+         }
 
-         var percentage = val / max;
          return Math.round(HSL_GREEN - (HSL_GREEN * percentage));
       }
 
-      function getColorHueDivergentPalette(valRaw) {
+      function getColorHueDivergentPalette(valRaw, palette) {
          // clamp the value to be within the allowed range
-         var max = MAX_PARTICLES;
-         var val = Math.min(Math.max(valRaw, MIN_PARTICLES), max);
-
-         return DIVERGENT_PALETTE[Math.floor(val / (max / DIVERGENT_PALETTE.length))];
+         var val = Math.min(Math.max(valRaw, MIN_PARTICLES), maxParticles);
+         var percentage = val / maxParticles;
+         return palette[ Math.floor(percentage * (palette.length - 1))];
       }
 
       function removeChannel(id) {
@@ -838,6 +884,18 @@
             setCellSelected(id, cell, false);
          }
       }
+
+      function changePalette() {
+         paletteId = $("#paletteChooser").val();
+         renderPalette();
+         dataManager.triggerDataChangeEvent();
+      }
+
+      function changeMaxParticles() {
+         maxParticles = $("#maxParticlesChooser").val();
+         renderPalette();
+         dataManager.triggerDataChangeEvent();
+      }
    </script>
 
    <script id="grid_row_template" type="text/x-handlebars-template">
@@ -939,6 +997,46 @@
                         the 12 tealight candles were located in the center of the room between Speck 146 and Speck 126.
                      </p>
                   </div>
+                  <div style="text-align:center">
+                     <table border="0" cellpadding="0" cellspacing="0" style="width:275px" align="center">
+                        <tr>
+                           <td colspan="2" style="font-size:10pt;" align="center">Particle Count Range</td>
+                        </tr>
+                        <tr>
+                           <td class="normalSizeText" align="left">Min: 0</td>
+                           <td class="normalSizeText" align="right">
+                              Max:
+                              <select id="maxParticlesChooser" onchange="changeMaxParticles()">
+                                 <option value="500">500</option>
+                                 <option value="750">750</option>
+                                 <option value="1000">1000</option>
+                                 <option value="2000">2000</option>
+                                 <option value="3000">3000</option>
+                                 <option value="4000" selected="selected">4000</option>
+                                 <option value="5000">5000</option>
+                                 <option value="6000">6000</option>
+                                 <option value="7000">7000</option>
+                                 <option value="8000">8000</option>
+                                 <option value="9000">9000</option>
+                                 <option value="10000">10000</option>
+                              </select>
+                           </td>
+                        </tr>
+                     </table>
+                     <canvas id="paletteCanvas"></canvas>
+                     <div class="normalSizeText">
+                        Palette:
+                        <select id="paletteChooser" onchange="changePalette()">
+                           <option value="-1">Green - Red, Smooth Gradient</option>
+                           <option value="5">Green - Red, Bucketed 5</option>
+                           <option value="7">Green - Red, Bucketed 7</option>
+                           <option value="9">Green - Red, Bucketed 9</option>
+                           <option value="11" selected="selected">Green - Red, Bucketed 11</option>
+                           <option value="2">Divergent</option>
+                           <option value="3">Divergent (Colorblind Safe)</option>
+                        </select>
+                     </div>
+                  </div>
                </div>
             </td>
          </tr>
@@ -985,7 +1083,7 @@
                   <div id="animationTimeLabel"></div>
                   <div id="axisControls">
                      <input id="unifyYAxesButton" type="button" onclick="unifyYAxes()" value="Unify Y-Axis Ranges"><br>
-                     <input id="autoScaleYAxesButton" type="button" onclick="autoScaleYAxes()" value="Fit Plot(s)">
+                     <input id="autoScaleYAxesButton" type="button" onclick="autoScaleYAxes()" value="Fit Plots">
                      <input id="autoScaleLockCheckbox" name="autoScaleLockCheckbox" type="checkbox" onchange="autoScaleLockChange()" value="true">Auto fit
                   </div>
                </div>
