@@ -635,15 +635,17 @@
       function unifyYAxes() {
          var min = Number.MAX_VALUE;
          var max = Number.MIN_VALUE;
+         var isInNeedOfUnification = false;
          grapher.forEachPlot(function(plot) {
             var stats = plot.getStatistics(dateAxis.getMin(), dateAxis.getMax());
             if (typeof stats['y_min'] !== 'undefined' && typeof stats['y_max'] !== 'undefined') {
                min = Math.min(min, stats['y_min']);
                max = Math.max(max, stats['y_max']);
+               isInNeedOfUnification = true;
             }
          });
 
-         if (!isNaN(min) && !isNaN(max)) {
+         if (isInNeedOfUnification) {
             var paddedRange = paddedYAxisRange(min, max);
 
             grapher.forEachPlot(function(plot, yAxis) {
