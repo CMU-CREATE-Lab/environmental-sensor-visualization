@@ -637,11 +637,12 @@
          var max = Number.MIN_VALUE;
          grapher.forEachPlot(function(plot) {
             var stats = plot.getStatistics(dateAxis.getMin(), dateAxis.getMax());
-            min = Math.min(min, stats['y_min']);
-            max = Math.max(max, stats['y_max']);
+            if (typeof stats['y_min'] !== 'undefined' && typeof stats['y_max'] !== 'undefined') {
+               min = Math.min(min, stats['y_min']);
+               max = Math.max(max, stats['y_max']);
+            }
          });
 
-         // TODO: do something better when getStatistics fails because there's no data within the date range
          if (!isNaN(min) && !isNaN(max)) {
             var paddedRange = paddedYAxisRange(min, max);
 
@@ -655,7 +656,6 @@
          grapher.forEachPlot(function(plot, yAxis) {
             var stats = plot.getStatistics(dateAxis.getMin(), dateAxis.getMax());
 
-            // TODO: do something better when getStatistics fails because there's no data within the date range
             if (typeof stats['y_min'] !== 'undefined' && typeof stats['y_max'] !== 'undefined') {
                var paddedRange = paddedYAxisRange(stats['y_min'], stats['y_max']);
                yAxis.setRange(paddedRange['min'], paddedRange['max']);
