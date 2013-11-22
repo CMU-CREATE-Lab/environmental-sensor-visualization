@@ -265,7 +265,7 @@
 
             // Need to set visibility for each device.  The coloring will get
             // done by triggering the data change event below.
-            dataManager.forEachDevice(function(name){
+            dataManager.forEachDevice(function(name) {
                var marker = markers[name];
                var icon = marker.getIcon();
                var isVisible = typeof devicesByLocationFilter[currentlySelectedLocationFilter][name] !== 'undefined';
@@ -641,18 +641,25 @@
             max = Math.max(max, stats['y_max']);
          });
 
-         var paddedRange = paddedYAxisRange(min, max);
+         // TODO: do something better when getStatistics fails because there's no data within the date range
+         if (!isNaN(min) && !isNaN(max)) {
+            var paddedRange = paddedYAxisRange(min, max);
 
-         grapher.forEachPlot(function(plot, yAxis) {
-            yAxis.setRange(paddedRange['min'], paddedRange['max']);
-         });
+            grapher.forEachPlot(function(plot, yAxis) {
+               yAxis.setRange(paddedRange['min'], paddedRange['max']);
+            });
+         }
       }
 
       function autoScaleYAxes() {
          grapher.forEachPlot(function(plot, yAxis) {
             var stats = plot.getStatistics(dateAxis.getMin(), dateAxis.getMax());
-            var paddedRange = paddedYAxisRange(stats['y_min'], stats['y_max']);
-            yAxis.setRange(paddedRange['min'], paddedRange['max']);
+
+            // TODO: do something better when getStatistics fails because there's no data within the date range
+            if (typeof stats['y_min'] !== 'undefined' && typeof stats['y_max'] !== 'undefined') {
+               var paddedRange = paddedYAxisRange(stats['y_min'], stats['y_max']);
+               yAxis.setRange(paddedRange['min'], paddedRange['max']);
+            }
          });
       }
 
@@ -768,7 +775,7 @@
                <div class="titleText">In-Home Speck Test</div>
                <div class="normalSizeText">
                   <p>
-                     We loaned 65 Specks to members of the CMU SCS community to put in their homes for five days. The Specks
+                     We loaned 64 Specks to members of the CMU SCS community to put in their homes for five days. The Specks
                      recorded samples once per minute. The colored dots on the map represent the values recorded. Actual
                      locations have been modified for privacy.
                   </p>
