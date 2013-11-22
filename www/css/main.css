@@ -152,9 +152,6 @@ body {
 
 #timeLabel {
    text-align: left;
-   width: 203px;
-   min-width: 203px;
-   max-width: 203px;
    color: #666666;
    margin-left: 2px;
 }

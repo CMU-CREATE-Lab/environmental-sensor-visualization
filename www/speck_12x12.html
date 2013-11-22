@@ -4,6 +4,53 @@
    <title>Speck 12x12 Grid Test</title>
    <link href="css/main.css" rel="stylesheet">
    <style type="text/css">
+      .normalSizeText {
+         font-size: 9pt !important;
+      }
+
+      a {
+         text-decoration: none;
+      }
+
+      .titleText {
+         font-size: 14pt;
+         font-weight: bold;
+         text-align: center;
+      }
+
+      #titleAndLegendArea {
+         padding-left: 10px;
+         width: 600px;
+         max-width: 600px;
+      }
+
+      #animationControls {
+         padding-left: 10px;
+      }
+
+      #timeLabelAndAxisControls {
+         position: relative;
+         height: 90px;
+         min-height: 90px;
+         max-height: 90px;
+      }
+
+      #animationTimeLabel {
+         position: absolute;
+         top: 5px;
+         left: 5px;
+         min-width: 130px;
+         text-align: left;
+         margin:0;
+      }
+
+      #axisControls {
+         position: absolute;
+         bottom: 5px;
+         left: 5px;
+         display: none;
+         font-size: smaller;
+      }
 
       #dateAxisContainer {
          border-top: 1px solid black;
@@ -657,8 +704,18 @@
 
       function setSizes() {
          var axisControlsWidth = $("#axisControls").is(":visible") ? $("#axisControls").width() : 0;
-         var plotContainerWidth = $(window).width() - 20 - Math.max($("#yAxesTableContainer").width(), axisControlsWidth) - 2;
+         var animationTimeLabelWidth = $("#animationTimeLabel").width();
+         var timeLabelAndAxisControlsWidth = Math.max(axisControlsWidth, animationTimeLabelWidth);
+         $("#timeLabelAndAxisControls").width(timeLabelAndAxisControlsWidth);
+         var yAxesTableContainerWidth = $("#yAxesTableContainer").width();
+         var plotContainerWidth = $(window).width() - 20 - Math.max(timeLabelAndAxisControlsWidth, Math.max(yAxesTableContainerWidth, axisControlsWidth)) - 2;
          var plotContainerHeight = $("#column0").height() - 2;
+         //console.log("window=[" + $(window).width() + "], " +
+         //            "axisControls=[" + axisControlsWidth + "], " +
+         //            "animationTimeLabel=[" + animationTimeLabelWidth + "], " +
+         //            "timeLabelAndAxisControls=[" + timeLabelAndAxisControlsWidth + "], " +
+         //            "yAxesTableContainer=[" + yAxesTableContainerWidth + "], " +
+         //            "plotContainer=[" + plotContainerWidth + "]");
 
          // resize date axis, plot container, and y axes
          dateAxis.setSize(plotContainerWidth, $("#dateAxis").height(), SequenceNumber.getNext());
@@ -722,15 +779,17 @@
       function unifyYAxes() {
          var min = Number.MAX_VALUE;
          var max = Number.MIN_VALUE;
+         var isInNeedOfUnification = false;
          grapher.forEachPlot(function(plot) {
             var stats = plot.getStatistics(dateAxis.getMin(), dateAxis.getMax());
             if (typeof stats['y_min'] !== 'undefined' && typeof stats['y_max'] !== 'undefined') {
                min = Math.min(min, stats['y_min']);
                max = Math.max(max, stats['y_max']);
+               isInNeedOfUnification = true;
             }
          });
 
-         if (!isNaN(min) && !isNaN(max)) {
+         if (isInNeedOfUnification) {
             var paddedRange = paddedYAxisRange(min, max);
 
             grapher.forEachPlot(function(plot, yAxis) {
@@ -848,88 +907,88 @@
 <div id="loading_panel">Loading...</div>
 <div id="main_panel">
    <div id="grapher_area" class="textSelectionDisabled">
-      <table border="0" cellpadding="0" cellspacing="0">
+      <table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 5px">
          <tr>
             <td>
-               <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                  <tr valign="bottom">
-                     <td>
-                        <table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 5px">
-                           <tr>
-                              <td>
-                                 <div id="Corner3" class="gridCell" title="Corner 3">C3</div>
-                              </td>
-                              <td>&nbsp;</td>
-                              <td>
-                                 <div id="Corner4" class="gridCell" title="Corner 4">C4</div>
-                              </td>
-                              <td rowspan="3" valign="bottom">
-                                 <table border="0" cellpadding="0" cellspacing="0" align="center" style="margin: 5px 0 0 25px;">
-                                    <tr valign="middle">
-                                       <td><input id="playButton" type="button" onclick="play()" value="Play"></td>
-                                       <td>
-                                          <select id="animationIntervalMillis">
-                                             <option value="1000">1x</option>
-                                             <option value="200">5x</option>
-                                             <option value="100">10x</option>
-                                             <option value="50">20x</option>
-                                             <option value="20" selected="selected">50x</option>
-                                             <option value="10">100x</option>
-                                          </select>
-                                       </td>
-                                       <td style="padding-left:20px">
-                                          <input id="resetDateAxisButton" type="button" onclick="resetDateAxis()" value="Reset Time Range">
-                                       </td>
-                                    </tr>
-                                 </table>
-                              </td>
-                           </tr>
-                           <tr>
-                              <td>&nbsp;</td>
-                              <td>
-                                 <div id="gridArea"></div>
-                              </td>
-                              <td>&nbsp;</td>
-                           </tr>
-                           <tr>
-                              <td>
-                                 <div id="Corner2" class="gridCell" title="Corner 2">C2</div>
-                              </td>
-                              <td>&nbsp;</td>
-                              <td>
-                                 <div id="Corner1" class="gridCell" title="Corner 1">C1</div>
-                              </td>
-                           </tr>
-                        </table>
-                     </td>
-                     <td align="right">
-                        <div id="animationTimeLabel" style="text-align:right"></div>
-                     </td>
-                  </tr>
-               </table>
+               <div id="Corner3" class="gridCell" title="Corner 3">C3</div>
             </td>
-            <td></td>
+            <td>&nbsp;</td>
+            <td>
+               <div id="Corner4" class="gridCell" title="Corner 4">C4</div>
+            </td>
+            <td rowspan="2" valign="top">
+               <div id="titleAndLegendArea">
+                  <div class="titleText">12 x 12 Grid Speck Test</div>
+                  <div class="normalSizeText">
+                     <p>
+                        We arranged 144 Specks in a 12 x 12 grid (see
+                        <a href="http://create.posthaven.com/speck-air-quality-test" target="speck12x12blogpost">photos</a>)
+                        to perform some tests and see how particles flow through the room. The Specks
+                        recorded samples once per second. The colored cells on the grid represent the values recorded. We also took periodic
+                        readings in the corners of the grid with a Hach MET ONE HHPC-6 particle counter--those readings are
+                        represented in the four corner cells labeled C1, C2, C3, and C4.
+                     </p>
+                     <p>
+                        Click on a cell to show/hide the plot for that location. You may select up to nine at a time to compare.
+                        Click on the date range to jump to a particular time. Drag the red triangular cursor on the date
+                        range to animate the values, or click on the Play button below. You can scroll on the date axis or
+                        y-axes to zoom the plots. The grey bars on the plot below the date axis show the start and end times of the test events.
+                     </p>
+                     <p>
+                        During the vacuum test, we vacuumed the floor at the front of the room in the area between cells C3 and C4. For the candle test,
+                        the 12 tealight candles were located in the center of the room between Speck 146 and Speck 126.
+                     </p>
+                  </div>
+               </div>
+            </td>
          </tr>
+         <tr>
+            <td>&nbsp;</td>
+            <td>
+               <div id="gridArea"></div>
+            </td>
+            <td>&nbsp;</td>
+         </tr>
+         <tr>
+            <td>
+               <div id="Corner2" class="gridCell" title="Corner 2">C2</div>
+            </td>
+            <td>&nbsp;</td>
+            <td>
+               <div id="Corner1" class="gridCell" title="Corner 1">C1</div>
+            </td>
+            <td valign="bottom">
+               <div id="animationControls">
+                  <input id="playButton" type="button" onclick="play()" value="Play">
+                  <select id="animationIntervalMillis">
+                     <option value="1000">1x</option>
+                     <option value="200">5x</option>
+                     <option value="100">10x</option>
+                     <option value="50">20x</option>
+                     <option value="20" selected="selected">50x</option>
+                     <option value="10">100x</option>
+                  </select>
+                  <input id="resetDateAxisButton" type="button" onclick="resetDateAxis()" value="Reset Time Range" style="margin-left: 20px;">
+               </div>
+            </td>
+         </tr>
+      </table>
+      <table border="0" cellpadding="0" cellspacing="0">
          <tr>
             <td>
                <div id="dateAxisContainer">
                   <div id="dateAxis"></div>
                </div>
             </td>
-            <td rowspan="2" valign="bottom">
-               <table id="axisControls" border="0" cellpadding="0" cellspacing="0" style="display:none;margin-left:5px;margin-bottom:5px;">
-                  <tr>
-                     <td>
-                        <input id="unifyYAxesButton" type="button" onclick="unifyYAxes()" value="Unify Y-Axis Ranges">
-                     </td>
-                  </tr>
-                  <tr>
-                     <td style="font-size: smaller">
-                        <input id="autoScaleYAxesButton" type="button" onclick="autoScaleYAxes()" value="Fit Plot(s)">
-                        <input id="autoScaleLockCheckbox" name="autoScaleLockCheckbox" type="checkbox" onchange="autoScaleLockChange()" value="true">Auto
-                     </td>
-                  </tr>
-               </table>
+            <td rowspan="2" valign="top">
+               <div id="timeLabelAndAxisControls">
+                  <div id="animationTimeLabel"></div>
+                  <div id="axisControls">
+                     <input id="unifyYAxesButton" type="button" onclick="unifyYAxes()" value="Unify Y-Axis Ranges"><br>
+                     <input id="autoScaleYAxesButton" type="button" onclick="autoScaleYAxes()" value="Fit Plot(s)">
+                     <input id="autoScaleLockCheckbox" name="autoScaleLockCheckbox" type="checkbox" onchange="autoScaleLockChange()" value="true">Auto fit
+                  </div>
+               </div>
             </td>
          </tr>
          <tr>
@@ -951,7 +1010,7 @@
                   <tr id="yAxesColor"></tr>
                   <tr id="yAxesInfo"></tr>
                </table>
-               <div id="timeLabel" style="text-align: center"></div>
+               <div id="timeLabel" style="text-align: left"></div>
             </td>
          </tr>
          <tr id="channelInfosContainer" valign="top" style="display:none">
