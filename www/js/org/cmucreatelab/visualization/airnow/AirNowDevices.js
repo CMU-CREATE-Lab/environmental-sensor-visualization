@@ -80,6 +80,8 @@ if (!org.cmucreatelab.util.Arrays) {
       var globalMaxTime = 0;
       var devicesByName = {};
 
+      var VALUE_INTERVAL = metadata['valueIntervalSecs'];
+
       // The "constructor"
       (function() {
          var dataView = new DataView(dataArrayBuffer);
@@ -146,12 +148,12 @@ if (!org.cmucreatelab.util.Arrays) {
          return devicesByName[name];
       }
 
-      this.clampTimeToInterval = function(device, t) {
-         return t - (t % device['valueInterval'])
+      this.clampTimeToInterval = function(t) {
+         return t - (t % VALUE_INTERVAL)
       }
 
       this.getValueAtTime = function(device, timeInSecs) {
-         var valueIndex = org.cmucreatelab.util.Arrays.binarySearch(device['times'], this.clampTimeToInterval(device, timeInSecs), org.cmucreatelab.util.Arrays.NUMERIC_COMPARATOR);
+         var valueIndex = org.cmucreatelab.util.Arrays.binarySearch(device['times'], this.clampTimeToInterval(timeInSecs), org.cmucreatelab.util.Arrays.NUMERIC_COMPARATOR);
          return (valueIndex < 0) ? null : device['values'][valueIndex];
       };
    };

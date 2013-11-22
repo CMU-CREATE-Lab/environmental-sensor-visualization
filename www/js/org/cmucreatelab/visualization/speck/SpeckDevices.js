@@ -78,12 +78,22 @@ if (!org.cmucreatelab.util.Arrays) {
 
       var globalMinTime = new Date().getTime() / 1000;
       var globalMaxTime = 0;
+      var clampedGlobalMinTime;
       var devicesByName = {};
+      var deviceIndexByName = {};
+      var valuesByTime = null;
 
-      var _clampTimeToInterval = function(device, t) {
-         return t - (t % device['valueInterval'])
+      var VALUE_INTERVAL = metadata['valueIntervalSecs'];
+      var NO_DATA = -1000;
+
+      var _clampTimeToInterval = function(t) {
+         return t - (t % VALUE_INTERVAL);
       };
       this.clampTimeToInterval = _clampTimeToInterval;
+
+      var computeTimeIndex = function(t) {
+         return (t - clampedGlobalMinTime) / VALUE_INTERVAL;
+      };
 
       // The "constructor"
       (function() {
@@ -93,8 +103,6 @@ if (!org.cmucreatelab.util.Arrays) {
          console.log("record size (bytes):   " + recordSize);
          console.log("num data samples:      " + (dataView.byteLength / recordSize));
 
-         //--------------------------------------
-
          // First compute the global min and max times and populate the devicesByName map.
          var numDevices = 0;
          for (var i = 0; i < metadata['devices'].length; i++) {
@@ -103,6 +111,7 @@ if (!org.cmucreatelab.util.Arrays) {
                globalMinTime = Math.min(globalMinTime, device['minTime']);
                globalMaxTime = Math.max(globalMaxTime, device['maxTime']);
                devicesByName[device['name']] = device;
+               deviceIndexByName[device['name']] = i;
                numDevices++;
             }
          }
@@ -110,21 +119,33 @@ if (!org.cmucreatelab.util.Arrays) {
          console.log("global min time: " + globalMinTime);
          console.log("global max time: " + globalMaxTime);
 
+         clampedGlobalMinTime = _clampTimeToInterval(globalMinTime);
+         var clampedGlobalMaxTime = _clampTimeToInterval(globalMaxTime);
+         var numTimeSteps = (clampedGlobalMaxTime - clampedGlobalMinTime) / VALUE_INTERVAL + 1;
+
+         // prepopulate the values array of arrays
+         valuesByTime = new Array(numTimeSteps);
+         for (var i = 0; i < numTimeSteps; i++) {
+            valuesByTime[i] = new Int32Array(numDevices);
+            for (var j = 0; j < numDevices; j++) {
+               valuesByTime[i][j] = NO_DATA;
+            }
+         }
+         window.foobar = valuesByTime;
+
+         console.log("clamped global min time: " + clampedGlobalMinTime);
+         console.log("clamped global max time: " + clampedGlobalMaxTime);
+         console.log("num time steps:          " + numTimeSteps);
+
          for (var deviceName in devicesByName) {
             var device = devicesByName[deviceName];
-            //console.log("Device:" + device['name']);
-            device['times'] = new Int32Array(device['numRecords']);
-            device['values'] = new Int32Array(device['numRecords']);
-            globalMinTime = Math.min(globalMinTime, device['minTime']);
-            globalMaxTime = Math.max(globalMaxTime, device['maxTime']);
-            var idx = 0;
+            var deviceIndex = deviceIndexByName[deviceName];
             var startingByte = device['recordOffset'] * recordSize;
             var endingByte = startingByte + (device['numRecords'] * recordSize);
-            //console.log("Bytes [" + startingByte + "] - [" + endingByte + "]");
             for (var j = startingByte; j < endingByte; j += recordSize) {
-               device['times'][idx] = _clampTimeToInterval(device, dataView.getInt32(j));
-               device['values'][idx] = dataView.getInt32(j + Int32Array.BYTES_PER_ELEMENT);
-               idx++;
+               var time = _clampTimeToInterval(dataView.getInt32(j));
+               var timeIndex = computeTimeIndex(time);
+               valuesByTime[timeIndex][deviceIndex] = dataView.getInt32(j + Int32Array.BYTES_PER_ELEMENT);
             }
          }
 
@@ -148,8 +169,14 @@ if (!org.cmucreatelab.util.Arrays) {
       }
 
       this.getValueAtTime = function(device, timeInSecs) {
-         var valueIndex = org.cmucreatelab.util.Arrays.binarySearch(device['times'], this.clampTimeToInterval(device, timeInSecs), org.cmucreatelab.util.Arrays.NUMERIC_COMPARATOR);
-         return (valueIndex < 0) ? null : device['values'][valueIndex];
+         var clampedTime = this.clampTimeToInterval(timeInSecs);
+         var timeIndex = computeTimeIndex(clampedTime);
+         if (0 <= timeIndex && timeIndex < valuesByTime.length) {
+            var deviceIndex = deviceIndexByName[device['name']];
+            var value = valuesByTime[timeIndex][deviceIndex];
+            return (value == NO_DATA) ? null : value;
+         }
+         return null;
       };
    };
 })();

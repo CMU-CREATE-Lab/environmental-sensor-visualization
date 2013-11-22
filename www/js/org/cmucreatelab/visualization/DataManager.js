@@ -133,7 +133,7 @@ else {
             var previousClampedTime = null;
             var previousClampedValue = null;
             for (var i = 0; i < 512; i++) {
-               var clampedTime = devices.clampTimeToInterval(device, t);
+               var clampedTime = devices.clampTimeToInterval(t);
                if (clampedTime != previousClampedTime) {
                   var value = devices.getValueAtTime(device, clampedTime);
                   if (value != null) {
