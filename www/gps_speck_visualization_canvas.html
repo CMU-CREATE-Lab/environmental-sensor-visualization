@@ -31,7 +31,10 @@
       var HSL_RED = 0;
       var HSL_GREEN = 120;
 
+      var USE_GRADIENT_DRAWING = false;
+
       var map;
+      var mapProjection;
       var canvasLayer;
       var context;
 
@@ -64,6 +67,8 @@
          google.maps.event.addListenerOnce(map, 'idle', function() {
             console.log("Map is done loading");
 
+            mapProjection = map.getProjection();
+
             parseData();
 
             initializeCanvas();
@@ -86,7 +91,8 @@
             points.push({
                            particles : particles,
                            timeUtcSecs : timeUtcSecs,
-                           latLong : latLong
+                           latLong : latLong,
+                           worldPoint : mapProjection.fromLatLngToPoint(latLong)
                         });
          });
       }
@@ -105,6 +111,13 @@
          };
          canvasLayer = new CanvasLayer(canvasLayerOptions);
          context = canvasLayer.canvas.getContext('2d');
+
+         // Poke google maps and trigger a resize whenever we detect a browser resize
+         window.addEventListener('resize',
+                                 function() {
+                                    google.maps.event.trigger(map, 'resize')
+                                 },
+                                 false);
       }
 
       function canvasLayerResizeHandler() {
@@ -118,80 +131,46 @@
          var canvasHeight = canvasLayer.canvas.height;
          context.clearRect(0, 0, canvasWidth, canvasHeight);
 
-         // we like our rectangles green
-         context.fillStyle = 'rgba(0, 255, 0, 1)';
-
-         /* We need to scale and translate the map for current view.
-          * see https://developers.google.com/maps/documentation/javascript/maptypes#MapCoordinates
-          */
-         var mapProjection = map.getProjection();
-
-         /**
-          * Clear transformation from last update by setting to identity matrix.
-          * Could use context.resetTransform(), but most browsers don't support
-          * it yet.
-          */
-         context.setTransform(1, 0, 0, 1, 0, 0);
-
-         // scale is just 2^zoom
-         var scale = Math.pow(2, map.zoom);
-         var scaleInverse = 1 / scale;
-         context.scale(scale, scale);
-
-         /* If the map was not translated, the topLeft corner would be 0,0 in
-          * world coordinates. Our translation is just the vector from the
-          * world coordinate of the topLeft corder to 0,0.
-          */
-         var offset = mapProjection.fromLatLngToPoint(canvasLayer.getTopLeft());
-         context.translate(-offset.x, -offset.y);
-         console.log("Offset: " + offset.toString());
-
          var mapBounds = map.getBounds();
 
-         var pointsDrawn = 0;
-         // render the points
+         // Get the top-right and bottom-left points, and the width and height so we can compute point positions later
+         var neWorldCoords = mapProjection.fromLatLngToPoint(mapBounds.getNorthEast());
+         var swWorldCoords = mapProjection.fromLatLngToPoint(mapBounds.getSouthWest());
+         var widthWorldCoords = neWorldCoords.x - swWorldCoords.x;
+         var heightWorldCoords = swWorldCoords.y - neWorldCoords.y;
 
+         // render the points
+         var pointsDrawn = 0;
          $.each(points, function(index, point) {
+            // TODO: this bounds containment check could be smarter...
             if (mapBounds.contains(point['latLong'])) {
-               drawPoint(mapProjection, scaleInverse, point, index==1);
+
+               // compute the canvas position for this point
+               var x = (point['worldPoint'].x - swWorldCoords.x) / widthWorldCoords * canvasWidth;
+               var y = (point['worldPoint'].y - neWorldCoords.y) / heightWorldCoords * canvasHeight;
+
+               drawCircle(x, y, 10, getColorHue(point['particles']));
+
                pointsDrawn++;
             }
          });
-         console.log("Drew [" + pointsDrawn + "] points");
 
+         //console.log("Drew [" + pointsDrawn + "] points");
       }
 
-      function drawPoint(mapProjection, scaleInverse, point, willDebug) {
-         // project rectLatLng to world coordinates and draw
-         var worldPoint = mapProjection.fromLatLngToPoint(point['latLong']);
-         drawCircle(worldPoint.x, worldPoint.y, 10 * scaleInverse, getColorHue(point['particles']), willDebug);
-         if (willDebug) {
-            console.log("World Point: " + worldPoint.toString());
-         }
-      }
-
-      function drawCircleNEW(x, y, radius, hue, willDebug) {
-         if (willDebug) {
-            console.log("drawCircle(" + x + "," + y + "," + radius + "," + hue + ")");
-         }
-         var grd=context.createRadialGradient(x,y,0,x,y,radius);
-         grd.addColorStop(0,'hsla(' + hue + ',100%,50%,1.0)');
-         grd.addColorStop(1,'hsla(' + hue + ',100%,50%,0.0)');
-         context.fillStyle=grd;
-
+      function drawCircle(x, y, radius, hue) {
          context.beginPath();
+         if (USE_GRADIENT_DRAWING) {
+            var grd = context.createRadialGradient(x, y, 0, x, y, radius);
+            grd.addColorStop(0, 'hsla(' + hue + ',100%,50%,1.0)');
+            grd.addColorStop(1, 'hsla(' + hue + ',100%,50%,0.0)');
+            context.fillStyle = grd;
+         }
+         else {
+            context.fillStyle = 'hsla(' + hue + ',100%,50%,0.6)';
+         }
          context.arc(x, y, radius, 0, TWO_PI, false);
          context.fill();
-      }
-
-      function drawCircle(x, y, radius, hue, willDebug) {
-         context.beginPath();
-         context.arc(x, y, radius, 0, TWO_PI, false);
-         context.fillStyle = 'hsla(' + hue + ',100%,50%,0.6)';
-         context.fill();
-         if (willDebug) {
-            console.log("drawCircle(" + x + "," + y + "," + radius + "," + hue + ")");
-         }
       }
    </script>
 
