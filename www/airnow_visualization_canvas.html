@@ -80,6 +80,7 @@
       var plotContainer;
 
       var map;
+      var mapProjection;
       var canvasLayer;
       var context;
 
@@ -200,6 +201,7 @@
          var mapOptions = {
             center : new google.maps.LatLng(39.043246371518045, -94.07431000579834),
             zoom : 4,
+            minZoom : 4,
             mapTypeId : google.maps.MapTypeId.TERRAIN
          };
          map = new google.maps.Map(document.getElementById("mapArea"), mapOptions);
@@ -210,6 +212,7 @@
          // Add an idle event listener ONCE to handle map loading.
          google.maps.event.addListenerOnce(map, 'idle', function() {
             console.log("Map is done loading");
+            mapProjection = map.getProjection();
             initializeCanvas();
             initializeMarkers();
          });
@@ -241,53 +244,36 @@
          var canvasHeight = canvasLayer.canvas.height;
          context.clearRect(0, 0, canvasWidth, canvasHeight);
 
-         /* We need to scale and translate the map for current view.
-          * see https://developers.google.com/maps/documentation/javascript/maptypes#MapCoordinates
-          */
-         var mapProjection = map.getProjection();
+         var mapBounds = map.getBounds();
 
-         /**
-          * Clear transformation from last update by setting to identity matrix.
-          * Could use context.resetTransform(), but most browsers don't support
-          * it yet.
-          */
-         context.setTransform(1, 0, 0, 1, 0, 0);
+         // Get the top-right and bottom-left points, and the width and height so we can compute point positions later
+         var neWorldCoords = mapProjection.fromLatLngToPoint(mapBounds.getNorthEast());
+         var swWorldCoords = mapProjection.fromLatLngToPoint(mapBounds.getSouthWest());
+         var widthWorldCoords = neWorldCoords.x - swWorldCoords.x;
+         var heightWorldCoords = swWorldCoords.y - neWorldCoords.y;
 
-         // scale is just 2^zoom
-         var scale = Math.pow(2, map.zoom);
-         var scaleInverse = 1 / scale;
-         context.scale(scale, scale);
+         // render the points
+         var pointsDrawn = 0;
+         var xMultiplier = canvasWidth / widthWorldCoords;
+         var yMultiplier = canvasHeight / heightWorldCoords;
+         $.each(markers, function(markerId, marker) {
+            // TODO: this bounds containment check could be smarter...
+            if (mapBounds.contains(marker['location'])) {
 
-         /* If the map was not translated, the topLeft corner would be 0,0 in
-          * world coordinates. Our translation is just the vector from the
-          * world coordinate of the topLeft corder to 0,0.
-          */
-         var topLeft = canvasLayer.getTopLeft();
-         if (topLeft) {
-            var offset = mapProjection.fromLatLngToPoint(topLeft);
-            context.translate(-offset.x, -offset.y);
-            console.log("Offset: " + offset.toString());
+               // compute the canvas position for this point
+               var x = (marker['worldPoint'].x - swWorldCoords.x) * xMultiplier;
+               var y = (marker['worldPoint'].y - neWorldCoords.y) * yMultiplier;
 
-            var mapBounds = map.getBounds();
+               drawPoint(x, y, marker);
 
-            var pointsDrawn = 0;
-            // render the points
-
-            $.each(markers, function(markerId, marker) {
-               if (mapBounds.contains(marker['location'])) {
-                  drawPoint(mapProjection, scaleInverse, marker);
-                  pointsDrawn++;
-               }
-            });
-            console.log("Drew [" + pointsDrawn + "] points");
-         }
+               pointsDrawn++;
+            }
+         });
       }
 
-      function drawPoint(mapProjection, scaleInverse, point) {
-         // project rectLatLng to world coordinates and draw
-         var worldPoint = mapProjection.fromLatLngToPoint(point['location']);
+      function drawPoint(x, y, point) {
          var isNoData = point['value'] == null;
-         drawCircle(worldPoint.x, worldPoint.y, (isNoData ? 4 : 6) * scaleInverse, isNoData ? "rgba(102,102,102,0.5)" : getColorForValue(point['value']));
+         drawCircle(x,y, (isNoData ? 4 : 6), isNoData ? "rgba(102,102,102,0.5)" : getColorForValue(point['value']));
       }
 
       function drawCircle(x, y, radius, color) {
@@ -300,7 +286,7 @@
       function initializeMarkers() {
          dataManager.forEachDevice(function(name, device) {
             var latLong = new google.maps.LatLng(device['latitude'], device['longitude'])
-            addMarker(name, latLong, true)
+            addMarker(name, latLong)
          });
 
          // set initial cursor to the midpoint of the available data--this will trigger the data change event,
@@ -310,12 +296,12 @@
       }
 
       // Add a marker to the map and push to the array.
-      function addMarker(id, location, isActive) {
+      function addMarker(id, location) {
 
          markers[id] = {
             id : id,
             location : location,
-            isActive : isActive,
+            worldPoint : mapProjection.fromLatLngToPoint(location),
             value : null
          };
       }
