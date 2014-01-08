@@ -141,13 +141,15 @@
 
          // render the points
          var pointsDrawn = 0;
+         var xMultiplier = canvasWidth / widthWorldCoords;
+         var yMultiplier = canvasHeight / heightWorldCoords;
          $.each(points, function(index, point) {
             // TODO: this bounds containment check could be smarter...
             if (mapBounds.contains(point['latLong'])) {
 
                // compute the canvas position for this point
-               var x = (point['worldPoint'].x - swWorldCoords.x) / widthWorldCoords * canvasWidth;
-               var y = (point['worldPoint'].y - neWorldCoords.y) / heightWorldCoords * canvasHeight;
+               var x = (point['worldPoint'].x - swWorldCoords.x) * xMultiplier;
+               var y = (point['worldPoint'].y - neWorldCoords.y) * yMultiplier;
 
                drawCircle(x, y, 10, getColorHue(point['particles']));
 
