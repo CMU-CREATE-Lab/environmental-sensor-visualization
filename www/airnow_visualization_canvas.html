@@ -231,6 +231,13 @@
          canvasLayer = new CanvasLayer(canvasLayerOptions);
          context = canvasLayer.canvas.getContext('2d');
          isCanvasInitialized = true;
+
+         // Poke google maps and trigger a resize whenever we detect a browser resize
+         window.addEventListener('resize',
+                                 function() {
+                                    google.maps.event.trigger(map, 'resize')
+                                 },
+                                 false);
       }
 
       function canvasLayerResizeHandler() {
