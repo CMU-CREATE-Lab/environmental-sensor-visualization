@@ -17,7 +17,7 @@
       #mapArea {
          height: 100%;
          margin: 0px;
-         padding: 0px
+         padding: 0px;
       }
    </style>
    <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCGR21nG0gjPnQZtlCbPIxpDcJ2T2fOrf8&sensor=false"></script>
@@ -31,6 +31,7 @@
       var HSL_RED = 0;
       var HSL_GREEN = 120;
       var SAMPLE_INTERVAL_SECS = 1;
+      var POINT_RADIUS = 7;
 
       var USE_GRADIENT_DRAWING = false;
 
@@ -38,6 +39,22 @@
       var mapProjection;
       var canvasLayer;
       var context;
+
+      var infoWindow = new google.maps.InfoWindow();
+
+      var canvasTransformProperties = {
+         neWorldCoords : null,
+         swWorldCoords : null,
+         widthWorldCoords : null,
+         heightWorldCoords : null,
+         xMultiplier : null,
+         yMultiplier : null
+      };
+
+      var mouseCanvasCoords = {
+         x : null,
+         y : null
+      };
 
       var points = [];
 
@@ -74,6 +91,91 @@
 
             initializeCanvas();
          });
+
+         // listen for mouse move and click events
+         google.maps.event.addListener(map, 'mousemove', createCanvasFeatureDetectingMouseEventHandler(
+               function(point) {
+                  if (point != infoWindowPoint) {
+                     var content = '<div class="infowin">' +
+                                   '<b>Particles: </b>' + point.particles + '<br>' +
+                                   '<b>Time: </b>' + new Date(point.timeUtcSecs * 1000) +
+                                   '</div>';
+                     var fakeMarker = {
+                        anchorPoint : 0,
+                        map : map,
+                        get : function(property) {
+                           if (!this.hasOwnProperty(property)) {
+                              console.log("ERROR: fakeMarker.get('" + property + "') called, but no such property is defined!");
+                           }
+                           return this[property];
+                        },
+                        getPosition : function() {
+                           return point.latLong;
+                        }};
+
+                     infoWindow.setContent(content);
+                     infoWindow.open(map, fakeMarker);
+                     map.setOptions({ draggableCursor : 'pointer' });
+                     infoWindowPoint = point;
+                  }
+               },
+               function() {
+                  infoWindow.close();
+                  infoWindowPoint = null;
+                  map.setOptions({ draggableCursor : null });
+               }
+         ));
+      }
+
+      var infoWindowPoint = null;
+
+      function createCanvasFeatureDetectingMouseEventHandler(featureDetectedCallback, featureNotDetectedCallback) {
+         return function(evt) {
+            if (evt && evt.latLng && mapProjection != null) {
+
+               // convert the mouse event latLng to canvas coords
+               var eventPoint = worldPointToCanvasPixelCoords(mapProjection.fromLatLngToPoint(evt.latLng));
+
+               // get the canvas color at this pixel to see whether there's a point drawn here
+               var imageData = context.getImageData(eventPoint.x, eventPoint.y, 1, 1);
+               if (imageData.data[0] != 0 ||
+                   imageData.data[1] != 0 ||
+                   imageData.data[2] != 0) {
+
+                  // iterate over all the points to see which is closest to this pixel (TODO: make this smarter?)
+                  var mapBounds = map.getBounds();
+                  var bestPoint = null;
+                  var bestDistance = POINT_RADIUS;
+                  $.each(points, function(index, point) {
+                     // TODO: this bounds containment check could be smarter...
+                     if (mapBounds.contains(point['latLong'])) {
+
+                        // compute the canvas position for this point
+                        var candidate = worldPointToCanvasPixelCoords(point['worldPoint']);
+
+                        // compute the distance between this point and the event point
+                        var distance = Math.sqrt(Math.pow(candidate.x - eventPoint.x, 2) + Math.pow(candidate.y - eventPoint.y, 2));
+
+                        // if the distance is less than the bestDistance found so far, the we've found a hit
+                        if (distance <= bestDistance) {
+                           bestPoint = point;
+                           bestDistance = distance;
+                        }
+                     }
+                  });
+
+                  if (bestPoint != null) {
+                     featureDetectedCallback(bestPoint);
+                  }
+                  else {
+                     featureNotDetectedCallback();
+                  }
+               }
+               else {
+                  featureNotDetectedCallback();
+               }
+            }
+         }
       }
 
       function parseData() {
@@ -128,60 +230,68 @@
       function canvasLayerUpdateHandler() {
 
          // clear previous canvas contents
-         var canvasWidth = canvasLayer.canvas.width;
-         var canvasHeight = canvasLayer.canvas.height;
-         context.clearRect(0, 0, canvasWidth, canvasHeight);
+         context.clearRect(0, 0, canvasLayer.canvas.width, canvasLayer.canvas.height);
 
-         var mapBounds = map.getBounds();
-
-         // Get the top-right and bottom-left points, and the width and height so we can compute point positions later
-         var neWorldCoords = mapProjection.fromLatLngToPoint(mapBounds.getNorthEast());
-         var swWorldCoords = mapProjection.fromLatLngToPoint(mapBounds.getSouthWest());
-         var widthWorldCoords = neWorldCoords.x - swWorldCoords.x;
-         var heightWorldCoords = swWorldCoords.y - neWorldCoords.y;
+         // Update the properties required when transforming world points to canvas points
+         updateCanvasTransformProperties();
 
          // render the points
-         var pointsDrawn = 0;
-         var xMultiplier = canvasWidth / widthWorldCoords;
-         var yMultiplier = canvasHeight / heightWorldCoords;
+         var mapBounds = map.getBounds();
          var previousPoint = null;
          $.each(points, function(index, point) {
             // TODO: this bounds containment check could be smarter...
             if (mapBounds.contains(point['latLong'])) {
 
                // compute the canvas position for this point
-               var x = (point['worldPoint'].x - swWorldCoords.x) * xMultiplier;
-               var y = (point['worldPoint'].y - neWorldCoords.y) * yMultiplier;
+               var newPoint = worldPointToCanvasPixelCoords(point['worldPoint']);
 
+               // get the color for this point and line segment
                var hue = getColorHue(point['particles']);
+
+               // draw the line segment
                if (previousPoint != null && (point['timeUtcSecs'] - previousPoint['timeUtcSecs'] <= SAMPLE_INTERVAL_SECS)) {
-                  drawLine(previousPoint, {x : x, y : y}, hue);
+                  drawLine(previousPoint, newPoint, hue);
                }
-               drawCircle(x, y, 7, hue);
 
-               pointsDrawn++;
+               // draw the circle
+               drawCircle(newPoint, POINT_RADIUS, hue);
 
-               previousPoint = {x : x, y : y, timeUtcSecs : point['timeUtcSecs']};
+               previousPoint = {x : newPoint.x, y : newPoint.y, timeUtcSecs : point['timeUtcSecs']};
             }
          });
-
-         //console.log("Drew [" + pointsDrawn + "] points");
       }
 
-      function drawLine(previousPoint, point, hue) {
+      function updateCanvasTransformProperties() {
+         var mapBounds = map.getBounds();
+         canvasTransformProperties.neWorldCoords = mapProjection.fromLatLngToPoint(mapBounds.getNorthEast());
+         canvasTransformProperties.swWorldCoords = mapProjection.fromLatLngToPoint(mapBounds.getSouthWest());
+         canvasTransformProperties.widthWorldCoords = canvasTransformProperties.neWorldCoords.x - canvasTransformProperties.swWorldCoords.x;
+         canvasTransformProperties.heightWorldCoords = canvasTransformProperties.swWorldCoords.y - canvasTransformProperties.neWorldCoords.y;
+         canvasTransformProperties.xMultiplier = canvasLayer.canvas.width / canvasTransformProperties.widthWorldCoords;
+         canvasTransformProperties.yMultiplier = canvasLayer.canvas.height / canvasTransformProperties.heightWorldCoords;
+      }
+
+      function worldPointToCanvasPixelCoords(worldPoint) {
+         return {
+            x : (worldPoint.x - canvasTransformProperties.swWorldCoords.x) * canvasTransformProperties.xMultiplier,
+            y : (worldPoint.y - canvasTransformProperties.neWorldCoords.y) * canvasTransformProperties.yMultiplier
+         };
+      }
+
+      function drawLine(p1, p2, hue) {
          context.beginPath();
          context.lineWidth = 5;
          context.lineCap = "round";
          context.strokeStyle = 'hsla(' + hue + ',100%,50%,0.6)';
-         context.moveTo(previousPoint.x, previousPoint.y);
-         context.lineTo(point.x, point.y);
+         context.moveTo(p1.x, p1.y);
+         context.lineTo(p2.x, p2.y);
          context.stroke();
       }
 
-      function drawCircle(x, y, radius, hue) {
+      function drawCircle(centerPoint, radius, hue) {
          context.beginPath();
          if (USE_GRADIENT_DRAWING) {
-            var grd = context.createRadialGradient(x, y, 0, x, y, radius);
+            var grd = context.createRadialGradient(centerPoint.x, centerPoint.y, 0, centerPoint.x, centerPoint.y, radius);
             grd.addColorStop(0, 'hsla(' + hue + ',100%,50%,1.0)');
             grd.addColorStop(1, 'hsla(' + hue + ',100%,50%,0.0)');
             context.fillStyle = grd;
@@ -189,7 +299,7 @@
          else {
             context.fillStyle = 'hsla(' + hue + ',100%,50%,0.6)';
          }
-         context.arc(x, y, radius, 0, TWO_PI, false);
+         context.arc(centerPoint.x, centerPoint.y, radius, 0, TWO_PI, false);
          context.fill();
       }
    </script>
