@@ -41,6 +41,7 @@
       var context;
 
       var infoWindow = new google.maps.InfoWindow();
+      var infoWindowAnchorPoint = null;
 
       var canvasTransformProperties = {
          neWorldCoords : null,
@@ -95,7 +96,9 @@
          // listen for mouse move and click events
          google.maps.event.addListener(map, 'mousemove', createCanvasFeatureDetectingMouseEventHandler(
                function(point) {
-                  if (point != infoWindowPoint) {
+                  // don't bother doing this if the InfoWindow is already being displayed for this point (it causes
+                  // annoying flickering if you do!)
+                  if (point != infoWindowAnchorPoint) {
                      var content = '<div class="infowin">' +
                                    '<b>Particles: </b>' + point.particles + '<br>' +
                                    '<b>Time: </b>' + new Date(point.timeUtcSecs * 1000) +
@@ -115,19 +118,17 @@
 
                      infoWindow.setContent(content);
                      infoWindow.open(map, fakeMarker);
+                     infoWindowAnchorPoint = point;
                      map.setOptions({ draggableCursor : 'pointer' });
-                     infoWindowPoint = point;
                   }
                },
                function() {
                   infoWindow.close();
-                  infoWindowPoint = null;
+                  infoWindowAnchorPoint = null;
                   map.setOptions({ draggableCursor : null });
                }
          ));
       }
-
-      var infoWindowPoint = null;
 
       function createCanvasFeatureDetectingMouseEventHandler(featureDetectedCallback, featureNotDetectedCallback) {
          return function(evt) {
