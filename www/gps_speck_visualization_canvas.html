@@ -30,6 +30,7 @@
       var MAX_PARTICLES = 5000;
       var HSL_RED = 0;
       var HSL_GREEN = 120;
+      var SAMPLE_INTERVAL_SECS = 1;
 
       var USE_GRADIENT_DRAWING = false;
 
@@ -143,6 +144,7 @@
          var pointsDrawn = 0;
          var xMultiplier = canvasWidth / widthWorldCoords;
          var yMultiplier = canvasHeight / heightWorldCoords;
+         var previousPoint = null;
          $.each(points, function(index, point) {
             // TODO: this bounds containment check could be smarter...
             if (mapBounds.contains(point['latLong'])) {
@@ -151,13 +153,29 @@
                var x = (point['worldPoint'].x - swWorldCoords.x) * xMultiplier;
                var y = (point['worldPoint'].y - neWorldCoords.y) * yMultiplier;
 
-               drawCircle(x, y, 10, getColorHue(point['particles']));
+               var hue = getColorHue(point['particles']);
+               if (previousPoint != null && (point['timeUtcSecs'] - previousPoint['timeUtcSecs'] <= SAMPLE_INTERVAL_SECS)) {
+                  drawLine(previousPoint, {x : x, y : y}, hue);
+               }
+               drawCircle(x, y, 7, hue);
 
                pointsDrawn++;
+
+               previousPoint = {x : x, y : y, timeUtcSecs : point['timeUtcSecs']};
             }
          });
 
          //console.log("Drew [" + pointsDrawn + "] points");
+      }
+
+      function drawLine(previousPoint, point, hue) {
+         context.beginPath();
+         context.lineWidth = 5;
+         context.lineCap = "round";
+         context.strokeStyle = 'hsla(' + hue + ',100%,50%,0.6)';
+         context.moveTo(previousPoint.x, previousPoint.y);
+         context.lineTo(point.x, point.y);
+         context.stroke();
       }
 
       function drawCircle(x, y, radius, hue) {
