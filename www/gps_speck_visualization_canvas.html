@@ -33,6 +33,7 @@
       var SAMPLE_INTERVAL_SECS = 1;
       var POINT_RADIUS = 7;
 
+      var DEVICE_PIXEL_RATIO = ('devicePixelRatio' in window && window.devicePixelRatio > 1) ? window.devicePixelRatio : 1;
       var USE_GRADIENT_DRAWING = false;
 
       var map;
@@ -132,8 +133,9 @@
                // convert the mouse event latLng to canvas coords
                var eventPoint = worldPointToCanvasPixelCoords(mapProjection.fromLatLngToPoint(evt.latLng));
 
-               // get the canvas color at this pixel to see whether there's a point drawn here
-               var imageData = context.getImageData(eventPoint.x, eventPoint.y, 1, 1);
+               // get the canvas color at this pixel to see whether there's a point drawn here (very important to take
+               // the DEVICE_PIXEL_RATIO into account here!)
+               var imageData = context.getImageData(eventPoint.x * DEVICE_PIXEL_RATIO, eventPoint.y * DEVICE_PIXEL_RATIO, 1, 1);
                if (imageData.data[0] != 0 ||
                    imageData.data[1] != 0 ||
                    imageData.data[2] != 0) {
@@ -263,8 +265,11 @@
          canvasTransformProperties.swWorldCoords = mapProjection.fromLatLngToPoint(mapBounds.getSouthWest());
          canvasTransformProperties.widthWorldCoords = canvasTransformProperties.neWorldCoords.x - canvasTransformProperties.swWorldCoords.x;
          canvasTransformProperties.heightWorldCoords = canvasTransformProperties.swWorldCoords.y - canvasTransformProperties.neWorldCoords.y;
-         canvasTransformProperties.xMultiplier = canvasLayer.canvas.width / canvasTransformProperties.widthWorldCoords;
-         canvasTransformProperties.yMultiplier = canvasLayer.canvas.height / canvasTransformProperties.heightWorldCoords;
+
+         // we need to be careful here to use the canvas's *style* width/height here, and not the actual
+         // width/height which will be different on devices where the pixel ratio is not 1 (e.g. retina displays)
+         canvasTransformProperties.xMultiplier = $(canvasLayer.canvas).width() / canvasTransformProperties.widthWorldCoords;
+         canvasTransformProperties.yMultiplier = $(canvasLayer.canvas).height() / canvasTransformProperties.heightWorldCoords;
       }
 
       function worldPointToCanvasPixelCoords(worldPoint) {

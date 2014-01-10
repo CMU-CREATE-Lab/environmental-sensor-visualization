@@ -403,10 +403,16 @@ CanvasLayer.prototype.resize_ = function() {
 
   // resizing may allocate a new back buffer, so do so conservatively
   if (oldWidth !== width || oldHeight !== height) {
-    this.canvas.width = width;
-    this.canvas.height = height;
-    this.canvas.style.width = width + 'px';
-    this.canvas.style.height = height + 'px';
+     this.canvas.style.width = width + 'px';
+     this.canvas.style.height = height + 'px';
+     if ("devicePixelRatio" in window && window.devicePixelRatio > 1) {
+        this.canvas.width = width * window.devicePixelRatio;
+        this.canvas.height = height * window.devicePixelRatio;
+        this.canvas.getContext('2d').scale(window.devicePixelRatio, window.devicePixelRatio);
+     } else {
+        this.canvas.width = width;
+        this.canvas.height = height;
+     }
 
     this.needsResize_ = true;
     this.scheduleUpdate();
