@@ -52,11 +52,6 @@
          yMultiplier : null
       };
 
-      var mouseCanvasCoords = {
-         x : null,
-         y : null
-      };
-
       var points = [];
 
       $(document).ready(function() {
@@ -93,7 +88,7 @@
             initializeCanvas();
          });
 
-         // listen for mouse move and click events
+         // listen for mouse move events
          google.maps.event.addListener(map, 'mousemove', createCanvasFeatureDetectingMouseEventHandler(
                function(point) {
                   // don't bother doing this if the InfoWindow is already being displayed for this point (it causes
