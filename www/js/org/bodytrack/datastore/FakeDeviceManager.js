@@ -302,7 +302,7 @@ if (!org.bodytrack.datastore.ChannelDatasource) {
                // TODO: improve efficiency!
                var value = getValueAtTime(deviceName, channelName, t);
                if (value != null) {
-                  json['data'].push([t, value, 0, 0])
+                  json['data'].push([t, value, 0, 1])
                }
                t += sampleWidthInSecs;
             }

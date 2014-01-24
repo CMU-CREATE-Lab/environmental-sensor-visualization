@@ -137,7 +137,7 @@ else {
                if (clampedTime != previousClampedTime) {
                   var value = devices.getValueAtTime(device, clampedTime);
                   if (value != null) {
-                     json['data'].push([clampedTime, value, 0, 0])
+                     json['data'].push([clampedTime, value, 0, 1])
                   }
                   previousClampedValue = value;
                }
