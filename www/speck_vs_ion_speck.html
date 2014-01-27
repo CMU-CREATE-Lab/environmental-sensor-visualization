@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html>
+<head>
+   <title>Speck vs Ion Speck</title>
+   <link href="css/main.css" rel="stylesheet">
+   <style type="text/css">
+      .normalSizeText {
+         font-size: 9pt !important;
+      }
+
+      a {
+         text-decoration: none;
+      }
+
+      .titleText {
+         font-size: 14pt;
+         font-weight: bold;
+         text-align: center;
+      }
+
+      .legendColor {
+        display: inline-block;
+      }
+
+
+      /* Some grapher style overrides */
+      #dateAxisContainer {
+         border-top-width: 1px;
+      }
+
+      .axisCell {
+         width: 50px;
+         height: 400px;
+      }
+
+      .yAxisContainer {
+         width: 50px;
+         height: 400px;
+      }
+
+      .yAxis {
+         width: 50px;
+         height: 400px;
+      }
+
+      .plotContainer {
+         height: 400px;
+      }
+
+      .plot {
+         height: 400px;
+      }
+
+   </style>
+   <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+   <script src="lib/handlebars.js"></script>
+   <script src="lib/moment.min.js"></script>
+   <script src="lib/commons-javascript/org/cmucreatelab/util/Arrays.js"></script>
+   <script src="lib/commons-javascript/org/cmucreatelab/util/Http.js"></script>
+   <script src="js/org/bodytrack/grapher/gwt/grapher2.nocache.js"></script>
+   <script src="js/org/bodytrack/grapher/MultiplotGrapher.js"></script>
+   <script src="js/org/cmucreatelab/visualization/DataManager.js"></script>
+   <script src="js/org/cmucreatelab/visualization/speck/SpeckDevices.js"></script>
+   <script language="JavaScript" type="text/javascript">
+
+      var METADATA_URL = "data/speck_vs_ion_speck_metadata.json";
+      var DATA_URL = "data/speck_vs_ion_speck_data.bin";
+
+      var TIMESTAMP_FORMAT = "YYYY-MM-DD HH:mm";
+
+      var dataManager = null;
+
+      var yAxisTemplate = null;
+      var dateAxis;
+      var grapher;
+      var plotContainer;
+
+      var globalTimeRange = null;
+
+      var isAutoScaleOn = false;
+
+      window.grapherLoad = loadData;
+
+      function loadData() {
+         $.ajax({
+                   url : METADATA_URL,
+                   type : 'GET',
+                   dataType : 'json',
+                   timeout : 5000,
+                   cache : false,
+                   global : false,
+                   success : function(devicesMetadata) {
+                      if (devicesMetadata && devicesMetadata['devices']) {
+                         loadBinaryData(devicesMetadata);
+                      }
+                      else {
+                         console.log("Failed to load " + METADATA_URL);
+                      }
+                   },
+                   error : function() {
+                      console.log("Failed to load " + METADATA_URL);
+                   }
+                });
+      }
+
+      function loadBinaryData(devicesMetadata) {
+         org.cmucreatelab.util.Http.loadArrayBuffer(DATA_URL,
+                                                    {
+                                                       success : function(arrayBuffer) {
+                                                          console.log("loadArrayBuffer SUCCESS!");
+                                                          var devices = new org.cmucreatelab.visualization.speck.SpeckDevices(devicesMetadata, arrayBuffer);
+                                                          dataManager = new org.cmucreatelab.visualization.DataManager(devices);
+
+                                                          // now that all the data is loaded, go ahead and initialize the page
+                                                          initialize();
+                                                       },
+                                                       failure : function(requestStatus) {
+                                                          // TODO: do something better
+                                                          alert("Failed to load the data from [" + DATA_URL + "] (Request Status: " + requestStatus + ")");
+                                                       }
+                                                    });
+      }
+
+      function initialize() {
+         $("#loading_panel").hide();
+         $("#main_panel").show();
+
+         // compile the templates for later use
+         yAxisTemplate = Handlebars.compile($("#y_axis_template").html());
+
+         // initialize the DateAxis, Grapher, and PlotContainer
+         globalTimeRange = dataManager.getGlobalTimeRange();
+         dateAxis = new DateAxis("dateAxis", "horizontal", {"min" : globalTimeRange['min'], "max" : globalTimeRange['max']});
+         dateAxis.addAxisChangeListener(function(axisChangeEvent) {
+
+            // prevent zooming or panning outside of range [globalTimeRange['min'], globalTimeRange['max']]
+            if (axisChangeEvent && (axisChangeEvent['min'] < globalTimeRange['min'] || axisChangeEvent['max'] > globalTimeRange['max'])) {
+               dateAxis.setRange(Math.max(axisChangeEvent['min'], globalTimeRange['min']),
+                                 Math.min(axisChangeEvent['max'], globalTimeRange['max']));
+            }
+            else {
+               // notify the data manager of the axis change
+               dataManager.setTimeRange({
+                                           "min" : axisChangeEvent['min'],
+                                           "max" : axisChangeEvent['max'],
+                                           "cursorPosition" : axisChangeEvent['cursorPosition']
+                                        });
+
+               // auto-scale the y-axes
+               if (isAutoScaleOn) {
+                  autoScaleYAxes();
+               }
+            }
+         });
+         grapher = new org.bodytrack.grapher.MultiplotGrapher(dateAxis);
+         plotContainer = new PlotContainer("pc1", false, []);
+
+         console.log("before grapher area show");
+
+         // show the grapher area
+         $("#grapher_area").show();
+
+         // set initial sizes
+         setSizes();
+
+         loadChannel('ion_speck', "#ff0000");
+         loadChannel('speck', "#0000ff");
+
+         // set up window resize handler
+         $(window).resize(setSizes);
+      }
+
+      function getYAxisElementId(id) {
+         // WARNING! This assumes that the id has no spaces and that the
+         // line below will produce a legal value for a DOM element id
+         return  "yAxis" + id;
+      }
+
+      function loadChannel(id, plotColor) {
+         var device = dataManager.findByName(id);
+
+         var yAxisElementId = getYAxisElementId(id);
+
+         $("#yAxes").append(yAxisTemplate({"yAxisElementId" : yAxisElementId}));
+
+         var channelDatasource = dataManager.getChannelDatasource(id);
+         var channel = {
+            "min" : device['minValue'],
+            "max" : device['maxValue'],
+            "time_type" : "utc",
+            "style" : {
+               "styles" : [
+                  {"type" : "line", "lineWidth" : 1, "show" : true, color : plotColor}
+               ],
+               highlight : {
+                  "lineWidth" : 1,
+                  "styles" : [
+                     {
+                        "type" : "lollipop",
+                        "color" : "#000000",
+                        "radius" : 1,
+                        "lineWidth" : 1,
+                        "fill" : false
+                     },
+                     {
+                        "show" : true,
+                        "type" : "value",
+                        "fillColor" : "#000000",
+                        "marginWidth" : 10,
+                        "font" : "7pt Helvetica,Arial,Verdana,sans-serif",
+                        "verticalOffset" : 7,
+                        "numberFormat" : "###,##0"
+                     }
+                  ]
+               }
+            }
+         };
+         grapher.addPlot(id, channel, channelDatasource, yAxisElementId);
+         grapher.addDataPointListener(id, displayTimeForDataPoint);
+         plotContainer.addPlot(grapher.getPlot(id));
+
+         $("#grapherContainer").show();
+
+         setSizes();
+      }
+
+      function displayTimeForDataPoint(val) {
+         $("#timeLabel").html(val ? moment.unix(val['date']).format(TIMESTAMP_FORMAT) : "");
+      }
+
+      function setSizes() {
+         var yAxisTableContainerWidth = $("#yAxesTableContainer").width();
+         var plotContainerWidth = $(window).width() - 20 - Math.max(yAxisTableContainerWidth, $("#yAxisControls").width()) - 2;
+         var plotContainerHeight = $("#column0").height() - 2;
+
+         // resize date axis, plot container, and y axes
+         dateAxis.setSize(plotContainerWidth, $("#dateAxis").height(), SequenceNumber.getNext());
+         plotContainer.setSize(plotContainerWidth, plotContainerHeight, SequenceNumber.getNext());
+         grapher.updateYAxesSizes();
+      }
+
+      function resetDateAxis() {
+         dateAxis.setRange(globalTimeRange['min'], globalTimeRange['max']);
+      }
+
+      function unifyYAxes() {
+         var min = Number.MAX_VALUE;
+         var max = Number.MIN_VALUE;
+         var isInNeedOfUnification = false;
+         grapher.forEachPlot(function(plot) {
+            var stats = plot.getStatistics(dateAxis.getMin(), dateAxis.getMax());
+            if (typeof stats['y_min'] !== 'undefined' && typeof stats['y_max'] !== 'undefined') {
+               min = Math.min(min, stats['y_min']);
+               max = Math.max(max, stats['y_max']);
+               isInNeedOfUnification = true;
+            }
+         });
+
+         if (isInNeedOfUnification) {
+            var paddedRange = paddedYAxisRange(min, max);
+
+            grapher.forEachPlot(function(plot, yAxis) {
+               yAxis.setRange(paddedRange['min'], paddedRange['max']);
+            });
+         }
+      }
+
+      function autoScaleYAxes() {
+         grapher.forEachPlot(function(plot, yAxis) {
+            var stats = plot.getStatistics(dateAxis.getMin(), dateAxis.getMax());
+
+            if (typeof stats['y_min'] !== 'undefined' && typeof stats['y_max'] !== 'undefined') {
+               var paddedRange = paddedYAxisRange(stats['y_min'], stats['y_max']);
+               yAxis.setRange(paddedRange['min'], paddedRange['max']);
+            }
+         });
+      }
+
+      function autoScaleLockChange() {
+         isAutoScaleOn = $("#autoScaleLockCheckbox").is(":checked");
+         if (isAutoScaleOn) {
+            autoScaleYAxes();
+            $("#autoScaleYAxesButton").attr("disabled", "disabled");
+         }
+         else {
+            $("#autoScaleYAxesButton").removeAttr("disabled");
+         }
+      }
+
+      function paddedYAxisRange(min, max) {
+         var yDiff = max - min;
+         var padding = 0.5;
+         if (yDiff < 1e-10) {
+            padding = 0.5;
+         }
+         else {
+            padding = 0.05 * yDiff;
+         }
+         return {min : min - padding, max : max + padding}
+      }
+   </script>
+
+   <script id="location_filter_option_template" type="text/x-handlebars-template">
+      <option value="{{name}}">{{name}} ({{count}})</option>
+   </script>
+
+   <script id="y_axis_template" type="text/x-handlebars-template">
+      <td id="{{yAxisElementId}}_container" class="axisCell">
+         <div class="yAxisContainer">
+            <div id="{{yAxisElementId}}" class="yAxis"></div>
+         </div>
+      </td>
+   </script>
+
+</head>
+<body>
+<div id="loading_panel">Loading...</div>
+<div id="main_panel">
+   <div class="titleText" style="text-align: center; padding-bottom: 50px">Speck vs Ion Speck</div>
+
+   <div id="grapher_area" class="textSelectionDisabled">
+      <table id="grapher" border="0" cellpadding="0" cellspacing="0">
+         <tr>
+            <td align="right">
+               <input id="resetDateAxisButton" type="button" onclick="resetDateAxis()" value="Reset Time Range">
+            </td>
+            <td rowspan="2" valign="bottom">
+               <div id="timeLabel" style="margin-left: 5px"></div>
+               <div id="yAxisControls">
+                  <input id="unifyYAxesButton" type="button" onclick="unifyYAxes()" value="Unify Y-Axis Ranges" style="margin-left: 5px"><br>
+                  <input id="autoScaleYAxesButton" type="button" onclick="autoScaleYAxes()" value="Fit Plots" style="margin-left: 5px">
+                  <input id="autoScaleLockCheckbox" name="autoScaleLockCheckbox" type="checkbox" onchange="autoScaleLockChange()" value="true"><label class="normalSizeText" for="autoScaleLockCheckbox">Auto fit</label>
+               </div>
+            </td>
+         </tr>
+         <tr>
+            <td width="400">
+               <div id="dateAxisContainer">
+                  <div id="dateAxis"></div>
+               </div>
+            </td>
+         </tr>
+         <tr id="grapherContainer" style="display:none">
+            <td valign="top" width="400" id="column0">
+               <div id="plotContainer1" class="plotContainer">
+                  <div id="pc1" class="plot"></div>
+               </div>
+            </td>
+            <td valign="top" id="yAxesTableContainer">
+               <table id="yAxesTable" border="0" cellpadding="0" cellspacing="0">
+                  <tr id="yAxes"></tr>
+                  <tr id="yAxesColor"></tr>
+                  <tr id="yAxesInfo"></tr>
+               </table>
+            </td>
+         </tr>
+      </table>
+      <div style="margin-top: 5px; display:table">
+         <div style="display:table-row">
+            <div class="legendColor" style="display:table-cell; background-color: #ff0000"></div>
+            <div style="display:table-cell;line-height: 22px;padding-left:5px">Ion Speck</div>
+         </div>
+         <div style="height:5px"></div>
+         <div style="display:table-row">
+            <div class="legendColor" style="display:table-cell; background-color: #0000ff"></div>
+            <div style="display:table-cell;line-height: 22px;padding-left:5px">Speck</div>
+         </div>
+      </div>
+   </div>
+</div>
+</body>
+</html>
