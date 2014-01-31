@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html>
+<head>
+   <title>GPS Speck Visualization</title>
+   <style type="text/css">
+      html, body {
+         height: 100%;
+         margin: 0px;
+         padding: 0px
+      }
+
+      body {
+         font-family: "Gill Sans Light", Verdana, Arial, sans-serif !important;
+         font-size: 10pt !important;
+      }
+
+      #mapArea {
+         position: absolute;
+         top: 0;
+         left: 0;
+         height: 100%;
+         margin: 0px;
+         padding: 0px;
+      }
+
+      #controlsArea {
+         position: absolute;
+         top: 0;
+         right: 0;
+         width: 300px;
+         height: 100%;
+         margin: 0px;
+         padding: 0px;
+         border-left: 1px solid black;
+      }
+
+      .normalSizeText {
+         font-size: 9pt !important;
+      }
+
+      .subtitleText {
+         font-size: larger;
+      }
+
+      .smallText {
+         font-size: smaller;
+      }
+
+      #paletteCanvas {
+         margin-top: 5px;
+         width: 273px;
+         height: 25px;
+         border: 1px solid black;
+      }
+   </style>
+   <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCGR21nG0gjPnQZtlCbPIxpDcJ2T2fOrf8&sensor=false"></script>
+   <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+   <script src="lib/canvas-layer/src/CanvasLayer.js"></script>
+   <script src="data/gps_speck_stroller_walk.js"></script>
+   <script language="JavaScript" type="text/javascript">
+      var TWO_PI = 2 * Math.PI;
+      var MIN_PARTICLES = 0;
+      var maxParticles = 2000;
+      var SAMPLE_INTERVAL_SECS = 1;
+      var POINT_RADIUS = 7;
+
+      var HSL_RED = 0;
+      var HSL_GREEN = 120;
+
+      // Got these divergent palettes from http://colorbrewer2.org/
+      var DIVERGENT_PALETTE = [ "#006837", "#1A9850", "#66BD63", "#A6D96A", "#D9EF8B", "#FFFFBF", "#FEE08B", "#FDAE61", "#F46D43", "#D73027", "#A50026" ];
+      var DIVERGENT_PALETTE_COLORBLIND_SAFE = ["#313695", "#4575B4", "#74ADD1", "#ABD9E9", "#E0F3F8", "#FFFFBF", "#FEE090", "#FDAE61", "#F46D43", "#D73027", "#A50026"];
+
+      var paletteCanvasContext = null;
+      var paletteId = 2;
+
+      var DEVICE_PIXEL_RATIO = ('devicePixelRatio' in window && window.devicePixelRatio > 1) ? window.devicePixelRatio : 1;
+
+      var map;
+      var mapProjection;
+      var canvasLayer;
+      var context;
+
+      var devices = {};
+
+      var infoWindow = new google.maps.InfoWindow();
+      var infoWindowAnchorPoint = null;
+
+      var canvasTransformProperties = {
+         neWorldCoords : null,
+         swWorldCoords : null,
+         widthWorldCoords : null,
+         heightWorldCoords : null,
+         xMultiplier : null,
+         yMultiplier : null
+      };
+
+      $(document).ready(function() {
+
+         var paletteCanvas = $("#paletteCanvas");
+         var paletteCanvasElem = paletteCanvas.get(0);
+         paletteCanvasElem.width = paletteCanvas.width();
+         paletteCanvasElem.style.width = paletteCanvas.width() + "px";
+         paletteCanvasElem.height = paletteCanvas.height();
+         paletteCanvasElem.style.height = paletteCanvas.height() + "px";
+         paletteCanvasContext = paletteCanvasElem.getContext("2d");
+         paletteCanvasContext.scale(1, 1);
+
+         renderPalette();
+
+         updateMapSize();
+         initializeMap();
+      });
+
+      function renderPalette() {
+         var paletteCanvas = $("#paletteCanvas");
+         var pixelWidth = paletteCanvas.width();
+         var pixelHeight = paletteCanvas.height();
+         paletteCanvasContext.clearRect(0, 0, pixelWidth, pixelHeight);
+
+         for (var x = 0; x <= pixelWidth; x = x + 1) {
+            var particlesValue = x / pixelWidth * maxParticles;
+            var color = getColorForValue(particlesValue, 1);
+            paletteCanvasContext.lineWidth = 1;
+            paletteCanvasContext.strokeStyle = color;
+            paletteCanvasContext.beginPath();
+            paletteCanvasContext.moveTo(x - 0.5, 0);
+            paletteCanvasContext.lineTo(x - 0.5, pixelHeight);
+            paletteCanvasContext.stroke();
+         }
+      }
+
+      function getColorForValue(value, alpha) {
+         if (paletteId == 2) {
+            return getColorHueDivergentPalette(value, DIVERGENT_PALETTE);
+         }
+         else if (paletteId == 3) {
+            return getColorHueDivergentPalette(value, DIVERGENT_PALETTE_COLORBLIND_SAFE);
+         }
+
+         return 'hsla(' + getColorHue(value) + ',100%,50%,'+alpha+')';
+      }
+
+      function getColorHue(valRaw) {
+         // clamp the value to be within the allowed range
+         var val = Math.min(Math.max(valRaw, MIN_PARTICLES), maxParticles);
+
+         var numBuckets = paletteId;
+         var percentage = val / maxParticles;   // convert to [0,1]
+         if (numBuckets > 0) {
+            var bucketIndex = Math.min(numBuckets - 1, Math.floor(percentage * numBuckets));
+            percentage = bucketIndex / (numBuckets - 1);
+         }
+
+         return Math.round(HSL_GREEN - (HSL_GREEN * percentage));
+      }
+
+      function getColorHueDivergentPalette(valRaw, palette) {
+         // clamp the value to be within the allowed range
+         var val = Math.min(Math.max(valRaw, MIN_PARTICLES), maxParticles);
+         var percentage = val / maxParticles;
+         return palette[ Math.floor(percentage * (palette.length - 1))];
+      }
+
+      function initializeMap() {
+         console.log("In init map");
+         var mapOptions = {
+            center : new google.maps.LatLng(40.44392430497171, -79.95299184431076),
+            zoom : 17,
+            mapTypeId : google.maps.MapTypeId.ROADMAP
+         };
+         map = new google.maps.Map(document.getElementById("mapArea"), mapOptions);
+         google.maps.event.addListener(map, 'bounds_changed', function() {
+            //console.log("Map bounds changed");
+         });
+
+         // Add an idle event listener ONCE to handle map loading.
+         google.maps.event.addListenerOnce(map, 'idle', function() {
+            console.log("Map is done loading");
+
+            mapProjection = map.getProjection();
+
+            parseData();
+
+            initializeCanvas();
+         });
+
+         // listen for mouse move events
+         //google.maps.event.addListener(map, 'mousemove', createCanvasFeatureDetectingMouseEventHandler(
+         //      function(point) {
+         //         // don't bother doing this if the InfoWindow is already being displayed for this point (it causes
+         //         // annoying flickering if you do!)
+         //         if (point != infoWindowAnchorPoint) {
+         //            var content = '<div class="infowin">' +
+         //                          '<b>Particles: </b>' + point.particles + '<br>' +
+         //                          '<b>Time: </b>' + new Date(point.timeUtcSecs * 1000) +
+         //                          '</div>';
+         //            var fakeMarker = {
+         //               anchorPoint : 0,
+         //               map : map,
+         //               get : function(property) {
+         //                  if (!this.hasOwnProperty(property)) {
+         //                     console.log("ERROR: fakeMarker.get('" + property + "') called, but no such property is defined!");
+         //                  }
+         //                  return this[property];
+         //               },
+         //               getPosition : function() {
+         //                  return point.latLong;
+         //               }};
+         //
+         //            infoWindow.setContent(content);
+         //            infoWindow.open(map, fakeMarker);
+         //            infoWindowAnchorPoint = point;
+         //            map.setOptions({ draggableCursor : 'pointer' });
+         //         }
+         //      },
+         //      function() {
+         //         infoWindow.close();
+         //         infoWindowAnchorPoint = null;
+         //         map.setOptions({ draggableCursor : null });
+         //      }
+         //));
+      }
+
+      function createCanvasFeatureDetectingMouseEventHandler(featureDetectedCallback, featureNotDetectedCallback) {
+         return function(evt) {
+            if (evt && evt.latLng && mapProjection != null) {
+
+               // convert the mouse event latLng to canvas coords
+               var eventPoint = worldPointToCanvasPixelCoords(mapProjection.fromLatLngToPoint(evt.latLng));
+
+               // get the canvas color at this pixel to see whether there's a point drawn here (very important to take
+               // the DEVICE_PIXEL_RATIO into account here!)
+               var imageData = context.getImageData(eventPoint.x * DEVICE_PIXEL_RATIO, eventPoint.y * DEVICE_PIXEL_RATIO, 1, 1);
+               if (imageData.data[0] != 0 ||
+                   imageData.data[1] != 0 ||
+                   imageData.data[2] != 0) {
+
+                  // iterate over all the points to see which is closest to this pixel (TODO: make this smarter?)
+                  var mapBounds = map.getBounds();
+                  var bestPoint = null;
+                  var bestDistance = POINT_RADIUS;
+
+                  // TODO: fixme!
+                  $.each(points, function(index, point) {
+                     // TODO: this bounds containment check could be smarter...
+                     if (mapBounds.contains(point['latLong'])) {
+
+                        // compute the canvas position for this point
+                        var candidate = worldPointToCanvasPixelCoords(point['worldPoint']);
+
+                        // compute the distance between this point and the event point
+                        var distance = Math.sqrt(Math.pow(candidate.x - eventPoint.x, 2) + Math.pow(candidate.y - eventPoint.y, 2));
+
+                        // if the distance is less than the bestDistance found so far, the we've found a hit
+                        if (distance <= bestDistance) {
+                           bestPoint = point;
+                           bestDistance = distance;
+                        }
+                     }
+                  });
+
+                  if (bestPoint != null) {
+                     featureDetectedCallback(bestPoint);
+                  }
+                  else {
+                     featureNotDetectedCallback();
+                  }
+               }
+               else {
+                  featureNotDetectedCallback();
+               }
+            }
+         }
+      }
+
+      function parseData() {
+         var deviceNames = [];
+
+         $.each(DATA, function(deviceName, data) {
+            devices[deviceName] = [];
+            deviceNames.push(deviceName);
+
+            var maxValue = Number.MIN_VALUE;
+            $.each(data, function(index, record) {
+               if (record.length > 0) {
+                  var timeUtcSecs = parseInt(record[0]);
+                  var particles = parseInt(record[1]);
+                  maxValue = Math.max(maxValue, particles);
+                  var latRaw = record[2];
+                  var lngRaw = record[3];
+                  var quadrant = record[4];
+                  var southernHemisphereMultiplier = quadrant.substr(0, 1) == "S" ? -1 : 1;
+                  var westernHemisphereMultiplier = quadrant.substr(1, 1) == "W" ? -1 : 1;
+                  var lat = convertGpsCoord(latRaw) * southernHemisphereMultiplier;
+                  var lng = convertGpsCoord(lngRaw) * westernHemisphereMultiplier;
+                  var latLong = new google.maps.LatLng(lat, lng);
+                  devices[deviceName].push({
+                                              particles : particles,
+                                              timeUtcSecs : timeUtcSecs,
+                                              latLong : latLong,
+                                              worldPoint : mapProjection.fromLatLngToPoint(latLong)
+                                           });
+               }
+            });
+            console.log(deviceName + " max: " + maxValue);
+         });
+
+         deviceNames.sort();
+
+         $.each(deviceNames, function(index, deviceName) {
+            var toggleId = "toggle_" + deviceName;
+            var toggle = $('<div><input type="checkbox" class="deviceToggle" name="' + toggleId + '" id="' + toggleId + '"><label for="' + toggleId + '" class="normalSizeText">' + deviceName + '</label></div>');
+            $("#speckToggles").append(toggle);
+            $("#" + toggleId).click(function() {
+               canvasLayerUpdateHandler();
+            });
+         });
+
+         $("#toggleAll").change(toggleAllDevices);
+      }
+
+      function convertGpsCoord(val) {
+         var valStr = val.toString();
+         return parseInt(valStr.substr(0, 2)) + (valStr.substr(2) / 60);
+      }
+
+      function initializeCanvas() {
+         // initialize the canvasLayer
+         var canvasLayerOptions = {
+            map : map,
+            resizeHandler : canvasLayerResizeHandler,
+            animate : false,
+            updateHandler : canvasLayerUpdateHandler
+         };
+         canvasLayer = new CanvasLayer(canvasLayerOptions);
+         context = canvasLayer.canvas.getContext('2d');
+
+         // Poke google maps and trigger a resize whenever we detect a browser resize
+         window.addEventListener('resize',
+                                 function() {
+                                    updateMapSize();
+                                    google.maps.event.trigger(map, 'resize');
+
+                                 },
+                                 false);
+
+         $("#toggleAll").click();   // set them all enabled by default
+      }
+
+      function updateMapSize() {
+         $("#mapArea").width($(window).width() - $("#controlsArea").width());
+      }
+
+      function canvasLayerResizeHandler() {
+         // nothing to do
+      }
+
+      function canvasLayerUpdateHandler() {
+
+         // clear previous canvas contents
+         context.clearRect(0, 0, canvasLayer.canvas.width, canvasLayer.canvas.height);
+
+         // Update the properties required when transforming world points to canvas points
+         updateCanvasTransformProperties();
+
+         // render the points
+         var mapBounds = map.getBounds();
+         var pointsDrawn = 0;
+         $.each(devices, function(deviceName, points) {
+            var deviceToggle = $("#toggle_" + deviceName);
+            if (deviceToggle.is(":checked")) {
+               var previousPoint = null;
+               $.each(points, function(index, point) {
+                  // TODO: this bounds containment check could be smarter...
+                  if (mapBounds.contains(point['latLong'])) {
+
+                     // compute the canvas position for this point
+                     var newPoint = worldPointToCanvasPixelCoords(point['worldPoint']);
+
+                     // get the color for this point and line segment
+                     var color = getColorForValue(point['particles'], 0.6);
+
+                     // draw the line segment
+                     if (previousPoint != null && (point['timeUtcSecs'] - previousPoint['timeUtcSecs'] <= SAMPLE_INTERVAL_SECS)) {
+                        drawLine(previousPoint, newPoint, color);
+                     }
+
+                     // draw the circle
+                     //drawCircle(newPoint, POINT_RADIUS, color);
+
+                     previousPoint = {x : newPoint.x, y : newPoint.y, timeUtcSecs : point['timeUtcSecs']};
+                     pointsDrawn++;
+                  }
+               });
+            }
+         });
+         console.log("pointsDrawn=" + pointsDrawn);
+      }
+
+      function updateCanvasTransformProperties() {
+         var mapBounds = map.getBounds();
+         canvasTransformProperties.neWorldCoords = mapProjection.fromLatLngToPoint(mapBounds.getNorthEast());
+         canvasTransformProperties.swWorldCoords = mapProjection.fromLatLngToPoint(mapBounds.getSouthWest());
+         canvasTransformProperties.widthWorldCoords = canvasTransformProperties.neWorldCoords.x - canvasTransformProperties.swWorldCoords.x;
+         canvasTransformProperties.heightWorldCoords = canvasTransformProperties.swWorldCoords.y - canvasTransformProperties.neWorldCoords.y;
+
+         // we need to be careful here to use the canvas's *style* width/height here, and not the actual
+         // width/height which will be different on devices where the pixel ratio is not 1 (e.g. retina displays)
+         canvasTransformProperties.xMultiplier = $(canvasLayer.canvas).width() / canvasTransformProperties.widthWorldCoords;
+         canvasTransformProperties.yMultiplier = $(canvasLayer.canvas).height() / canvasTransformProperties.heightWorldCoords;
+      }
+
+      function worldPointToCanvasPixelCoords(worldPoint) {
+         return {
+            x : (worldPoint.x - canvasTransformProperties.swWorldCoords.x) * canvasTransformProperties.xMultiplier,
+            y : (worldPoint.y - canvasTransformProperties.neWorldCoords.y) * canvasTransformProperties.yMultiplier
+         };
+      }
+
+      function drawLine(p1, p2, color) {
+         context.beginPath();
+         context.lineWidth = 5;
+         context.lineCap = "round";
+         context.strokeStyle = color;
+         context.moveTo(p1.x, p1.y);
+         context.lineTo(p2.x, p2.y);
+         context.stroke();
+      }
+
+      function drawCircle(centerPoint, radius, color) {
+         context.beginPath();
+         context.fillStyle = color;
+         context.arc(centerPoint.x, centerPoint.y, radius, 0, TWO_PI, false);
+         context.fill();
+      }
+
+      function changePalette() {
+         paletteId = $("#paletteChooser").val();
+         renderPalette();
+         canvasLayerUpdateHandler();
+      }
+
+      function changeMaxParticles() {
+         maxParticles = $("#maxParticlesChooser").val();
+         renderPalette();
+         canvasLayerUpdateHandler();
+      }
+
+      function toggleAllDevices() {
+         $(".deviceToggle").prop('checked', $("#toggleAll").is(":checked"));
+         renderPalette();
+         canvasLayerUpdateHandler();
+      }
+
+   </script>
+</head>
+<body>
+<div id="mapArea"></div>
+<div id="controlsArea">
+   <div id="speckToggles" style="padding:10px">
+      <div class="subtitleText">Specks <span class="smallText">(<input type="checkbox" id="toggleAll"><label for="toggleAll" class="smallText">all</label>)</span></div>
+   </div>
+   <div style="text-align:center">
+      <table border="0" cellpadding="0" cellspacing="0" style="width:275px" align="center">
+         <tr>
+            <td colspan="2" style="font-size:10pt;" align="center">Particle Count Range</td>
+         </tr>
+         <tr>
+            <td class="normalSizeText" align="left">Min: 0</td>
+            <td class="normalSizeText" align="right">
+               Max:
+               <select id="maxParticlesChooser" onchange="changeMaxParticles()">
+                  <option value="250">250</option>
+                  <option value="500">500</option>
+                  <option value="750">750</option>
+                  <option value="1000">1000</option>
+                  <option value="2000" selected="selected">2000</option>
+                  <option value="3000">3000</option>
+                  <option value="4000">4000</option>
+                  <option value="5000">5000</option>
+               </select>
+            </td>
+         </tr>
+      </table>
+      <canvas id="paletteCanvas"></canvas>
+      <div class="normalSizeText">
+         Palette:
+         <select id="paletteChooser" onchange="changePalette()">
+            <option value="-1">Green - Red, Smooth Gradient</option>
+            <option value="5">Green - Red, Bucketed 5</option>
+            <option value="7">Green - Red, Bucketed 7</option>
+            <option value="9">Green - Red, Bucketed 9</option>
+            <option value="11">Green - Red, Bucketed 11</option>
+            <option value="2" selected="selected">Divergent</option>
+            <option value="3">Divergent (Colorblind Safe)</option>
+         </select>
+      </div>
+   </div>
+</div>
+</body>
+</html>
