@@ -99,10 +99,15 @@ else {
       };
 
       this.triggerDataChangeEvent = function() {
-         // publish event, including the current channel values
-         var changeEvent = createDataChangeEvent();
+         var values = {};
+         var getValueFunction = devices.isFixedIntervalData() ? devices.getValueAtTime : devices.getNearestPreviousValueAtTime;
+         devices.forEach(function(name, device) {
+            values[name] = getValueFunction(device, currentTimeRange['cursorPosition']);
+         });
+
+         // publish event, passing the current channel values
          for (var i = 0; i < dataChangeListeners.length; i++) {
-            dataChangeListeners[i](changeEvent);
+            dataChangeListeners[i](values);
          }
       };
 
@@ -130,33 +135,38 @@ else {
 
             var device = devices.findByName(name);
             var t = offsetTimeInSecs;
-            var previousClampedTime = null;
-            var previousClampedValue = null;
-            for (var i = 0; i < 512; i++) {
-               var clampedTime = devices.clampTimeToInterval(t);
-               if (clampedTime != previousClampedTime) {
-                  var value = devices.getValueAtTime(device, clampedTime);
-                  if (value != null) {
-                     json['data'].push([clampedTime, value, 0, 1])
+            if (devices.isFixedIntervalData()) {
+               var previousClampedTime = null;
+               var previousClampedValue = null;
+               for (var i = 0; i < 512; i++) {
+                  var clampedTime = devices.clampTimeToInterval(t);
+                  if (clampedTime != previousClampedTime) {
+                     var value = devices.getValueAtTime(device, clampedTime);
+                     if (value != null) {
+                        json['data'].push([clampedTime, value, 0, 1]);
+                     }
+                     previousClampedValue = value;
                   }
-                  previousClampedValue = value;
+                  previousClampedTime = clampedTime;
+                  t += sampleWidthInSecs;
                }
-               previousClampedTime = clampedTime;
-               t += sampleWidthInSecs;
+            }
+            else {
+               var previousT = t;
+               for (var j = 0; j < 512; j++) {
+                  var valueObj = devices.getNearestPreviousValueAtTime(device, t);
+                  if (valueObj != null) {
+                     if (valueObj['time'] >= previousT) {
+                        json['data'].push([valueObj['time'], valueObj['val'], 0, 1]);
+                     }
+                  }
+                  previousT = t;
+                  t += sampleWidthInSecs;
+               }
             }
 
             successCallback(JSON.stringify(json));
          };
-      }
-
-      var createDataChangeEvent = function() {
-         // TODO: improve this by only including devices whose clamped time has actually changed
-         var values = {};
-         devices.forEach(function(name, device) {
-            values[name] = devices.getValueAtTime(device, currentTimeRange['cursorPosition']);
-         });
-
-         return values;
       }
    };
 })();

@@ -54,5 +54,24 @@
       this.getValueAtTime = function(device, timeInSecs) {
          return 0;
       }
+
+      /**
+       * Returns an object containing the device's nearest previous value to the given time, as well as the time of that
+       * value, or null if there is no previous value.
+       * @param device the device
+       * @param timeInSecs the time in seconds
+       * @returns {{time: *, val: number}}
+       */
+      this.getNearestPreviousValueAtTime = function(device, timeInSecs) {
+         return {time: timeInSecs, val: this.getValueAtTime(device, timeInSecs)};
+      };
+
+      /**
+       * Returns <code>true</code> if the data occurs at a regular interval; <code>false</code> otherwise.
+       * @returns {boolean} whether the data occurs at a regular interval
+       */
+      this.isFixedIntervalData = function() {
+         return true;
+      };
    };
 })();

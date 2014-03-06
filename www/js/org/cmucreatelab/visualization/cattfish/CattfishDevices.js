@@ -1,5 +1,5 @@
 //======================================================================================================================
-// An encapsulation of AirNow device data, for use by org.cmucreatelab.visualization.DataManager.
+// An encapsulation of CATTFish device data, for use by org.cmucreatelab.visualization.DataManager.
 //
 // Dependencies:
 // * org.cmucreatelab.util.Arrays
@@ -48,14 +48,14 @@ else {
 }
 
 // Repeat the creation and type-checking for the next level
-if (!org.cmucreatelab.visualization.airnow) {
-   org.cmucreatelab.visualization.airnow = {};
+if (!org.cmucreatelab.visualization.cattfish) {
+   org.cmucreatelab.visualization.cattfish = {};
 }
 else {
-   if (typeof org.cmucreatelab.visualization.airnow != "object") {
-      var orgCmucreatelabVisualizationAirnowExistsMessage = "Error: failed to create org.cmucreatelab.visualization.airnow namespace: org.cmucreatelab.visualization.airnow already exists and is not an object";
-      alert(orgCmucreatelabVisualizationAirnowExistsMessage);
-      throw new Error(orgCmucreatelabVisualizationAirnowExistsMessage);
+   if (typeof org.cmucreatelab.visualization.cattfish != "object") {
+      var orgCmucreatelabVisualizationCattfishExistsMessage = "Error: failed to create org.cmucreatelab.visualization.cattfish namespace: org.cmucreatelab.visualization.cattfish already exists and is not an object";
+      alert(orgCmucreatelabVisualizationCattfishExistsMessage);
+      throw new Error(orgCmucreatelabVisualizationCattfishExistsMessage);
    }
 }
 //======================================================================================================================
@@ -64,7 +64,7 @@ else {
 // DEPENDECIES
 //======================================================================================================================
 if (!org.cmucreatelab.util.Arrays) {
-   var noArraysMsg = "The org.cmucreatelab.util.Arrays library is required by org.cmucreatelab.visualization.airnow.AirNowDevices.js";
+   var noArraysMsg = "The org.cmucreatelab.util.Arrays library is required by org.cmucreatelab.visualization.cattfish.CattfishDevices.js";
    alert(noArraysMsg);
    throw new Error(noArraysMsg);
 }
@@ -74,63 +74,28 @@ if (!org.cmucreatelab.util.Arrays) {
 // CODE
 //======================================================================================================================
 (function() {
-   org.cmucreatelab.visualization.airnow.AirNowDevices = function(metadata, dataArrayBuffer) {
-
-      var VALUE_INTERVAL = metadata['valueIntervalSecs'];
+   org.cmucreatelab.visualization.cattfish.CattfishDevices = function(deviceInstallations) {
 
       var globalMinTime = new Date().getTime() / 1000;
       var globalMaxTime = 0;
-      var devicesByName = {};
       var self = this;
 
       // The "constructor"
       (function() {
-         var dataView = new DataView(dataArrayBuffer);
-         var recordSize = Int32Array.BYTES_PER_ELEMENT + Int16Array.BYTES_PER_ELEMENT;
-         console.log("dataView size (bytes): " + dataView.byteLength);
-         console.log("record size (bytes):   " + recordSize);
-         console.log("num data samples:      " + (dataView.byteLength / recordSize));
-
-         //--------------------------------------
-
-         // First compute the global min and max times and populate the devicesByName map.
+         // First compute the global min and max times.
          var numDevices = 0;
-         for (var i = 0; i < metadata['devices'].length; i++) {
-            var device = metadata['devices'][i];
-            if (device['numRecords'] > 0) {
-               globalMinTime = Math.min(globalMinTime, device['minTime']);
-               globalMaxTime = Math.max(globalMaxTime, device['maxTime']);
-               devicesByName[device['name']] = device;
-               numDevices++;
-            }
+         for (var deviceId in deviceInstallations) {
+            var deviceInstallation = deviceInstallations[deviceId];
+            var device = deviceInstallation['device'];
+            globalMinTime = Math.min(globalMinTime, device['timestamp_gmt_secs']['min']);
+            globalMaxTime = Math.max(globalMaxTime, device['timestamp_gmt_secs']['max']);
+            numDevices++;
          }
          console.log("numDevices:      " + numDevices);
          console.log("global min time: " + globalMinTime);
          console.log("global max time: " + globalMaxTime);
 
-         for (var deviceName in devicesByName) {
-            var device = devicesByName[deviceName];
-            //console.log("Device:" + device['name']);
-            device['times'] = new Int32Array(device['numRecords']);
-            device['values'] = new Float32Array(device['numRecords']);
-            globalMinTime = Math.min(globalMinTime, device['minTime']);
-            globalMaxTime = Math.max(globalMaxTime, device['maxTime']);
-            var idx = 0;
-            var startingByte = device['recordOffset'] * recordSize;
-            var endingByte = startingByte + (device['numRecords'] * recordSize);
-            //console.log("Bytes [" + startingByte + "] - [" + endingByte + "]");
-            for (var j = startingByte; j < endingByte; j += recordSize) {
-               device['times'][idx] = dataView.getInt32(j);
-
-               // Get the value, but divide it by 10 because the server has multiplied all
-               // values by 10 and saved as shorts in order to save space in the binary file.
-               // So, we need to convert back to the actual value here.
-               device['values'][idx] = dataView.getInt16(j + Int32Array.BYTES_PER_ELEMENT) / 10.0;
-               idx++;
-            }
-         }
-
-         console.log("AirNowData initialization complete!");
+         console.log("CattfishDevices initialization complete!");
       })();
 
       this.getGlobalTimeRange = function() {
@@ -139,32 +104,49 @@ if (!org.cmucreatelab.util.Arrays) {
 
       this.forEach = function(callback) {
          if (typeof callback === 'function') {
-            for (var name in devicesByName) {
-               callback(name, devicesByName[name]);
+            for (var name in deviceInstallations) {
+               callback(name, deviceInstallations[name]);
             }
          }
       };
 
       this.findByName = function(name) {
-         return devicesByName[name];
+         return deviceInstallations[name];
       };
 
+      var VALUE_INTERVAL = 1; // TODO
       this.clampTimeToInterval = function(t) {
-         return t - (t % VALUE_INTERVAL)
+         return t - (t % VALUE_INTERVAL);
       };
 
       this.getValueAtTime = function(device, timeInSecs) {
-         var valueIndex = org.cmucreatelab.util.Arrays.binarySearch(device['times'], self.clampTimeToInterval(timeInSecs), org.cmucreatelab.util.Arrays.NUMERIC_COMPARATOR);
-         return (valueIndex < 0) ? null : device['values'][valueIndex];
-      };
-
-      this.getNearestPreviousValueAtTime = function(device, timeInSecs) {
-         // TODO
          return null;
       };
 
+      this.getNearestPreviousValueAtTime = function(device, timeInSecs) {
+         var times = device['device']['timestamp_gmt_secs']['values'];
+         var conductivityValues = device['device']['conductivity']['values'];
+         var temperatureValues = device['device']['temp_c']['values'];
+
+         var index = null;
+         if (timeInSecs < times[0]) {
+            return null;
+         }
+         else if (timeInSecs > times[times.length - 1]) {
+            index = times.length - 1;
+         }
+         else {
+            index = org.cmucreatelab.util.Arrays.binarySearch(times, timeInSecs, org.cmucreatelab.util.Arrays.NUMERIC_COMPARATOR);
+            if (index < 0) {
+               index = ~index - 1;
+            }
+         }
+
+         return {time : times[index], val : conductivityValues[index], temp : temperatureValues[index]};
+      };
+
       this.isFixedIntervalData = function() {
-         return true;
+         return false;
       };
    };
 })();

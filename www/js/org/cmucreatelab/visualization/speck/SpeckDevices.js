@@ -82,14 +82,14 @@ if (!org.cmucreatelab.util.Arrays) {
       var devicesByName = {};
       var deviceIndexByName = {};
       var valuesByTime = null;
+      var self = this;
 
       var VALUE_INTERVAL = metadata['valueIntervalSecs'];
       var NO_DATA = -1000;
 
-      var _clampTimeToInterval = function(t) {
+      this.clampTimeToInterval = function(t) {
          return t - (t % VALUE_INTERVAL);
       };
-      this.clampTimeToInterval = _clampTimeToInterval;
 
       var computeTimeIndex = function(t) {
          return (t - clampedGlobalMinTime) / VALUE_INTERVAL;
@@ -119,8 +119,8 @@ if (!org.cmucreatelab.util.Arrays) {
          console.log("global min time: " + globalMinTime);
          console.log("global max time: " + globalMaxTime);
 
-         clampedGlobalMinTime = _clampTimeToInterval(globalMinTime);
-         var clampedGlobalMaxTime = _clampTimeToInterval(globalMaxTime);
+         clampedGlobalMinTime = self.clampTimeToInterval(globalMinTime);
+         var clampedGlobalMaxTime = self.clampTimeToInterval(globalMaxTime);
          var numTimeSteps = (clampedGlobalMaxTime - clampedGlobalMinTime) / VALUE_INTERVAL + 1;
 
          // prepopulate the values array of arrays
@@ -143,7 +143,7 @@ if (!org.cmucreatelab.util.Arrays) {
             var startingByte = device['recordOffset'] * recordSize;
             var endingByte = startingByte + (device['numRecords'] * recordSize);
             for (var j = startingByte; j < endingByte; j += recordSize) {
-               var time = _clampTimeToInterval(dataView.getInt32(j));
+               var time = self.clampTimeToInterval(dataView.getInt32(j));
                var timeIndex = computeTimeIndex(time);
                valuesByTime[timeIndex][deviceIndex] = dataView.getInt32(j + Int32Array.BYTES_PER_ELEMENT);
             }
@@ -166,10 +166,10 @@ if (!org.cmucreatelab.util.Arrays) {
 
       this.findByName = function(name) {
          return devicesByName[name];
-      }
+      };
 
       this.getValueAtTime = function(device, timeInSecs) {
-         var clampedTime = this.clampTimeToInterval(timeInSecs);
+         var clampedTime = self.clampTimeToInterval(timeInSecs);
          var timeIndex = computeTimeIndex(clampedTime);
          if (0 <= timeIndex && timeIndex < valuesByTime.length) {
             var deviceIndex = deviceIndexByName[device['name']];
@@ -177,6 +177,15 @@ if (!org.cmucreatelab.util.Arrays) {
             return (value == NO_DATA) ? null : value;
          }
          return null;
+      };
+
+      this.getNearestPreviousValueAtTime = function(device, timeInSecs) {
+         // TODO
+         return null;
+      };
+
+      this.isFixedIntervalData = function() {
+         return true;
       };
    };
 })();
