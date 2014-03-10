@@ -131,7 +131,6 @@ if (!org.cmucreatelab.util.Arrays) {
                valuesByTime[i][j] = NO_DATA;
             }
          }
-         window.foobar = valuesByTime;
 
          console.log("clamped global min time: " + clampedGlobalMinTime);
          console.log("clamped global max time: " + clampedGlobalMaxTime);
