@@ -100,6 +100,8 @@ if (!window['$']) {
             yAxis : yAxis,
             yAxisElementId : yAxisElementId
          };
+
+         return plot;
       };
 
       this.addTimespanPlot = function(plotId, channel, channelDatasource, yAxisElementId) {
@@ -113,6 +115,8 @@ if (!window['$']) {
             yAxis : yAxis,
             yAxisElementId : yAxisElementId
          };
+
+         return plot;
       };
 
       this.addDataPointListener = function(plotId, listener) {
