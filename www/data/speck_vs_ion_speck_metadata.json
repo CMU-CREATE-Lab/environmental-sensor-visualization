@@ -1,4 +1,4 @@
 {"valueIntervalSecs":1,"devices" : [
-{"name":"ion_speck","prettyName":"Ion Speck","latitude":0,"longitude":0,"locationDetails":"","minTime":1385130377,"maxTime":1385408232,"minValue":1866,"maxValue":21006,"minValueTime":1385151547,"maxValueTime":1385153349,"numRecords":241033,"recordOffset":0},
-{"name":"speck","prettyName":"Speck","latitude":0,"longitude":1,"locationDetails":"","minTime":1385130464,"maxTime":1385401935,"minValue":0,"maxValue":15063,"minValueTime":1385393822,"maxValueTime":1385153593,"numRecords":243071,"recordOffset":241033}
+{"name":"ion_speck","prettyName":"Ion Speck","latitude":0,"longitude":0,"locationDetails":"","minTime":1391783781,"maxTime":1394032679,"minValue":-3158,"maxValue":18096,"minValueTime":1393011668,"maxValueTime":1391844499,"numRecords":2246501,"recordOffset":0},
+{"name":"speck","prettyName":"Speck","latitude":0,"longitude":1,"locationDetails":"","minTime":1391783781,"maxTime":1394032679,"minValue":0,"maxValue":17129,"minValueTime":1393858178,"maxValueTime":1392306039,"numRecords":2246407,"recordOffset":2246501}
 ]}
