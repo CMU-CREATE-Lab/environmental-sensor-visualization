@@ -139,8 +139,13 @@ if (!org.cmucreatelab.util.Arrays) {
             index = org.cmucreatelab.util.Arrays.binarySearch(times, timeInSecs, org.cmucreatelab.util.Arrays.NUMERIC_COMPARATOR);
             if (index < 0) {
                index = ~index - 1;
+            }
+            else {
+               // If the timeInSecs exists in the times array, then we want the PREVIOUS one.  Need to be careful about
+               // the case were we ask for--and get--the very first element in the array.  There is no previous element
+               // in that case, so return null.
+               index = index - 1;
 
-               // shouldn't ever happen, but...
                if (index < 0) {
                   return null;
                }
