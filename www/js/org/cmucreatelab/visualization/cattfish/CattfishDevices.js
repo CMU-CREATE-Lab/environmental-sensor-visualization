@@ -139,6 +139,11 @@ if (!org.cmucreatelab.util.Arrays) {
             index = org.cmucreatelab.util.Arrays.binarySearch(times, timeInSecs, org.cmucreatelab.util.Arrays.NUMERIC_COMPARATOR);
             if (index < 0) {
                index = ~index - 1;
+
+               // shouldn't ever happen, but...
+               if (index < 0) {
+                  return null;
+               }
             }
          }
 
