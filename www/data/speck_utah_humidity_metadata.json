@@ -1,0 +1,7 @@
+{"valueIntervalSecs":1,"devices" : [
+{"name":"speck1","prettyName":"Speck 1","latitude":0,"longitude":1,"locationDetails":"","minTime":1384974715,"maxTime":1393281554,"minValue":10,"maxValue":64,"minValueTime":1390595875,"maxValueTime":1392306120,"numRecords":1340,"recordOffset":0},
+{"name":"speck2","prettyName":"Speck 2","latitude":0,"longitude":2,"locationDetails":"","minTime":1384961328,"maxTime":1393281499,"minValue":14,"maxValue":45,"minValueTime":1391699012,"maxValueTime":1389130339,"numRecords":47852,"recordOffset":1340},
+{"name":"speck3","prettyName":"Speck 3","latitude":0,"longitude":3,"locationDetails":"","minTime":1383690584,"maxTime":1393278690,"minValue":14,"maxValue":59,"minValueTime":1391638827,"maxValueTime":1390491930,"numRecords":1992,"recordOffset":49192},
+{"name":"speck4","prettyName":"Speck 4","latitude":0,"longitude":4,"locationDetails":"","minTime":1384958572,"maxTime":1393278139,"minValue":14,"maxValue":46,"minValueTime":1391818724,"maxValueTime":1393275514,"numRecords":48986,"recordOffset":51184},
+{"name":"speck5","prettyName":"Speck 5","latitude":0,"longitude":5,"locationDetails":"","minTime":1384897174,"maxTime":1393280113,"minValue":13,"maxValue":38,"minValueTime":1390578175,"maxValueTime":1392829991,"numRecords":47656,"recordOffset":100170}
+]}

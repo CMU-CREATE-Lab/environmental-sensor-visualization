@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html>
+<head>
+   <title>Speck Utah Test</title>
+   <link href="css/main.css" rel="stylesheet">
+   <style type="text/css">
+      .normalSizeText {
+         font-size: 9pt !important;
+      }
+
+      a {
+         text-decoration: none;
+      }
+
+      .titleText {
+         font-size: 14pt;
+         font-weight: bold;
+         text-align: center;
+      }
+
+      .legendColor {
+         display: inline-block;
+      }
+
+      /* Some grapher style overrides */
+      #dateAxisContainer {
+         border-top-width: 1px;
+      }
+
+      .axisCell {
+         width: 50px;
+         height: 300px;
+      }
+
+      .yAxisContainer {
+         width: 50px;
+         height: 300px;
+      }
+
+      .yAxis {
+         width: 50px;
+         height: 300px;
+      }
+
+      .plotContainer {
+         height: 300px;
+      }
+
+      .plot {
+         height: 300px;
+      }
+
+      .speckNameAndColor {
+         display: inline-block;
+         margin-left: 10px;
+      }
+
+      .speckNameAndColor:first-of-type {
+         margin-left: 0;
+      }
+
+      #plotContainer2, #yAxes2 .yAxisContainer {
+         border-top: none;
+      }
+
+      .channelLabel {
+         width: 20px;
+         max-width: 20px;
+      }
+
+      .rot90 {
+         /* Safari */
+         -webkit-transform: rotate(-90deg);
+
+         /* Firefox */
+         -moz-transform: rotate(-90deg);
+
+         /* IE */
+         -ms-transform: rotate(-90deg);
+
+         /* Opera */
+         -o-transform: rotate(-90deg);
+
+         /* Internet Explorer */
+         filter: progid:DXImageTransform.Microsoft.BasicImage(rotation=3);
+      }
+   </style>
+   <script src="lib/jquery/jquery-1.10.2.min.js"></script>
+   <script src="lib/handlebars/handlebars-v1.3.0.js"></script>
+   <script src="lib/moment.min.js"></script>
+   <script src="lib/commons-javascript/org/cmucreatelab/util/Arrays.js"></script>
+   <script src="lib/commons-javascript/org/cmucreatelab/util/Http.js"></script>
+   <script src="js/org/bodytrack/grapher/gwt/grapher2.nocache.js"></script>
+   <script src="js/org/bodytrack/grapher/MultiplotGrapher.js"></script>
+   <script src="js/org/cmucreatelab/visualization/DataManager.js"></script>
+   <script src="js/org/cmucreatelab/visualization/speck/SpeckDevicesRaggedData.js"></script>
+   <script language="JavaScript" type="text/javascript">
+
+      var PARTICLES_METADATA_URL = "data/speck_utah_particles_metadata.json";
+      var PARTICLES_DATA_URL = "data/speck_utah_particles_data.bin";
+      var HUMIDITY_METADATA_URL = "data/speck_utah_humidity_metadata.json";
+      var HUMIDITY_DATA_URL = "data/speck_utah_humidity_data.bin";
+
+      var TIMESTAMP_FORMAT = "YYYY-MM-DD HH:mm:ss";
+
+      var particlesDataManager = null;
+      var humidityDataManager = null;
+
+      var yAxisTemplate = null;
+      var dateAxis;
+      var particlesGrapher;
+      var particlesPlotContainer;
+      var humidityGrapher;
+      var humidityPlotContainer;
+
+      var globalTimeRange = null;
+
+      var isAutoScaleOn = false;
+
+      var speckIdToColorMap = {
+         'speck1' : "#ff0000",
+         'speck2' : "#0000ff",
+         'speck3' : "#00ff00",
+         'speck4' : "#ff00ff",
+         'speck5' : "#00ffff"
+      };
+
+      window.grapherLoad = loadData;
+
+      function loadData() {
+         loadMetadata(PARTICLES_METADATA_URL, PARTICLES_DATA_URL, 'particlesDataManager');
+         loadMetadata(HUMIDITY_METADATA_URL, HUMIDITY_DATA_URL, 'humidityDataManager');
+         waitForDataToLoad();
+      }
+
+      function waitForDataToLoad() {
+         if (particlesDataManager == null || humidityDataManager == null) {
+            setTimeout(waitForDataToLoad, 20);
+         }
+         else {
+            initialize();
+         }
+      }
+
+      function loadMetadata(metadataUrl, dataUrl, nameOfGlobalVariableForDataManager) {
+         $.ajax({
+                   url : metadataUrl,
+                   type : 'GET',
+                   dataType : 'json',
+                   timeout : 5000,
+                   cache : false,
+                   global : false,
+                   success : function(devicesMetadata) {
+                      if (devicesMetadata && devicesMetadata['devices']) {
+                         console.log("loadData SUCCESS!");
+                         loadBinaryData(devicesMetadata, dataUrl, nameOfGlobalVariableForDataManager);
+                      }
+                      else {
+                         console.log("Failed to load " + metadataUrl);
+                      }
+                   },
+                   error : function() {
+                      console.log("Failed to load " + metadataUrl);
+                   }
+                });
+      }
+
+      function loadBinaryData(devicesMetadata, url, nameOfGlobalVariableForDataManager) {
+         org.cmucreatelab.util.Http.loadArrayBuffer(url,
+                                                    {
+                                                       success : function(arrayBuffer) {
+                                                          console.log("loadArrayBuffer SUCCESS!");
+                                                          var devices = new org.cmucreatelab.visualization.speck.SpeckDevicesRaggedData(devicesMetadata, arrayBuffer);
+                                                          window[nameOfGlobalVariableForDataManager] = new org.cmucreatelab.visualization.DataManager(devices);
+                                                       },
+                                                       failure : function(requestStatus) {
+                                                          alert("Failed to load the data from [" + url + "] (Request Status: " + requestStatus + ")");
+                                                       }
+                                                    });
+      }
+
+      function initialize() {
+         $("#loading_panel").hide();
+         $("#main_panel").show();
+
+         // compile the templates for later use
+         yAxisTemplate = Handlebars.compile($("#y_axis_template").html());
+         var speckNameAndColorTemplate = Handlebars.compile($("#speck_name_and_color_template").html());
+
+         // initialize the DateAxis, Grapher, and PlotContainer
+         globalTimeRange = {
+            min : Math.min(particlesDataManager.getGlobalTimeRange()['min'], humidityDataManager.getGlobalTimeRange()['min']),
+            max : Math.max(particlesDataManager.getGlobalTimeRange()['max'], humidityDataManager.getGlobalTimeRange()['max'])
+         };
+         dateAxis = new DateAxis("dateAxis", "horizontal", {"min" : globalTimeRange['min'], "max" : globalTimeRange['max']});
+         dateAxis.addAxisChangeListener(function(axisChangeEvent) {
+
+            // prevent zooming or panning outside of range [globalTimeRange['min'], globalTimeRange['max']]
+            if (axisChangeEvent && (axisChangeEvent['min'] < globalTimeRange['min'] || axisChangeEvent['max'] > globalTimeRange['max'])) {
+               dateAxis.setRange(Math.max(axisChangeEvent['min'], globalTimeRange['min']),
+                                 Math.min(axisChangeEvent['max'], globalTimeRange['max']));
+            }
+            else {
+               // notify the data manager of the axis change
+               var newTimeRange = {
+                  "min" : axisChangeEvent['min'],
+                  "max" : axisChangeEvent['max'],
+                  "cursorPosition" : axisChangeEvent['cursorPosition']
+               };
+               particlesDataManager.setTimeRange(newTimeRange);
+               humidityDataManager.setTimeRange(newTimeRange);
+
+               // auto-scale the y-axes
+               if (isAutoScaleOn) {
+                  autoScaleYAxes();
+               }
+            }
+         });
+         particlesGrapher = new org.bodytrack.grapher.MultiplotGrapher(dateAxis);
+         particlesPlotContainer = new PlotContainer("pc1", false, []);
+         humidityGrapher = new org.bodytrack.grapher.MultiplotGrapher(dateAxis);
+         humidityPlotContainer = new PlotContainer("pc2", false, []);
+
+         console.log("before grapher area show");
+
+         // show the grapher area
+         $("#grapher_area").show();
+
+         $.each(speckIdToColorMap, function(name, plotColor) {
+            console.log("[" + name + "]=[" + plotColor + "]");
+            loadChannel(particlesDataManager.findByName(name), 'particles', plotColor, particlesGrapher, particlesPlotContainer, particlesDataManager, "yAxes1");
+            loadChannel(humidityDataManager.findByName(name), 'humidity', plotColor, humidityGrapher, humidityPlotContainer, humidityDataManager, "yAxes2");
+            $("#speckNamesAndColors").append(speckNameAndColorTemplate({name : particlesDataManager.findByName(name)['prettyName'], color : plotColor}));
+         });
+
+         $(".grapherContainer").show();
+
+         // set initial sizes
+         setSizes();
+
+         // set up window resize handler
+         $(window).resize(setSizes);
+      }
+
+      function loadChannel(device, channelName, plotColor, grapher, plotContainer, dataManager, yAxesContainerElementId) {
+         var id = device['name'];
+
+         var yAxisElementId = "yAxis_" + id + "_" + channelName;
+
+         $("#" + yAxesContainerElementId).append(yAxisTemplate({"yAxisElementId" : yAxisElementId}));
+
+         var channel = {
+            "min" : device['minValue'],
+            "max" : device['maxValue'],
+            "time_type" : "utc",
+            "style" : {
+               "styles" : [
+                  {"type" : "line", "lineWidth" : 1, "show" : true, color : plotColor}
+               ],
+               highlight : {
+                  "lineWidth" : 1,
+                  "styles" : [
+                     {
+                        "type" : "lollipop",
+                        "color" : "#000000",
+                        "radius" : 1,
+                        "lineWidth" : 1,
+                        "fill" : false
+                     },
+                     {
+                        "show" : true,
+                        "type" : "value",
+                        "fillColor" : "#000000",
+                        "marginWidth" : 10,
+                        "font" : "7pt Helvetica,Arial,Verdana,sans-serif",
+                        "verticalOffset" : 7,
+                        "numberFormat" : "###,##0"
+                     }
+                  ]
+               }
+            }
+         };
+         grapher.addPlot(id, channel, dataManager.getChannelDatasource(id), yAxisElementId);
+         grapher.addDataPointListener(id, displayTimeForDataPoint);
+         plotContainer.addPlot(grapher.getPlot(id));
+
+         setSizes();
+      }
+
+      function displayTimeForDataPoint(val) {
+         $("#timeLabel").html(val ? moment.unix(val['date']).format(TIMESTAMP_FORMAT) : "");
+      }
+
+      function setSizes() {
+         var yAxisTableContainerWidth = $(".yAxesTableContainer").width();
+         var plotContainerWidth = $(window).width() - 20 - $(".rot90").width() - Math.max(yAxisTableContainerWidth, $("#yAxisControls").width()) - 2;
+         var plotContainerHeight = $(".plotContainer").height() - 2;
+
+         // resize date axis, plot container, and y axes
+         dateAxis.setSize(plotContainerWidth, $("#dateAxis").height(), SequenceNumber.getNext());
+         particlesPlotContainer.setSize(plotContainerWidth, plotContainerHeight, SequenceNumber.getNext());
+         particlesGrapher.updateYAxesSizes();
+         humidityPlotContainer.setSize(plotContainerWidth, plotContainerHeight, SequenceNumber.getNext());
+         humidityGrapher.updateYAxesSizes();
+      }
+
+      function resetDateAxis() {
+         dateAxis.setRange(globalTimeRange['min'], globalTimeRange['max']);
+      }
+
+      function unifyYAxes() {
+         var unify = function(grapher) {
+            var min = Number.MAX_VALUE;
+            var max = Number.MIN_VALUE;
+            var isInNeedOfUnification = false;
+
+            grapher.forEachPlot(function(plot) {
+               var stats = plot.getStatistics(dateAxis.getMin(), dateAxis.getMax());
+               if (typeof stats['y_min'] !== 'undefined' && typeof stats['y_max'] !== 'undefined') {
+                  min = Math.min(min, stats['y_min']);
+                  max = Math.max(max, stats['y_max']);
+                  isInNeedOfUnification = true;
+               }
+            });
+
+            if (isInNeedOfUnification) {
+               var paddedRange = paddedYAxisRange(min, max);
+
+               grapher.forEachPlot(function(plot, yAxis) {
+                  yAxis.setRange(paddedRange['min'], paddedRange['max']);
+               });
+            }
+         };
+
+         unify(particlesGrapher);
+         unify(humidityGrapher);
+      }
+
+      function autoScaleYAxes() {
+         function autoScale(grapher) {
+            grapher.forEachPlot(function(plot, yAxis) {
+               var stats = plot.getStatistics(dateAxis.getMin(), dateAxis.getMax());
+               if (typeof stats['y_min'] !== 'undefined' && typeof stats['y_max'] !== 'undefined') {
+                  var paddedRange = paddedYAxisRange(stats['y_min'], stats['y_max']);
+                  yAxis.setRange(paddedRange['min'], paddedRange['max']);
+               }
+            });
+         }
+
+         autoScale(particlesGrapher);
+         autoScale(humidityGrapher);
+      }
+
+      function autoScaleLockChange() {
+         isAutoScaleOn = $("#autoScaleLockCheckbox").is(":checked");
+         if (isAutoScaleOn) {
+            autoScaleYAxes();
+            $("#autoScaleYAxesButton").attr("disabled", "disabled");
+         }
+         else {
+            $("#autoScaleYAxesButton").removeAttr("disabled");
+         }
+      }
+
+      function paddedYAxisRange(min, max) {
+         var yDiff = max - min;
+         var padding = 0.5;
+         if (yDiff < 1e-10) {
+            padding = 0.5;
+         }
+         else {
+            padding = 0.05 * yDiff;
+         }
+         return {min : min - padding, max : max + padding}
+      }
+   </script>
+
+   <script id="location_filter_option_template" type="text/x-handlebars-template">
+      <option value="{{name}}">{{name}} ({{count}})</option>
+   </script>
+
+   <script id="y_axis_template" type="text/x-handlebars-template">
+      <td id="{{yAxisElementId}}_container" class="axisCell">
+         <div class="yAxisContainer">
+            <div id="{{yAxisElementId}}" class="yAxis"></div>
+         </div>
+      </td>
+   </script>
+
+   <script id="speck_name_and_color_template" type="text/x-handlebars-template">
+      <div class="speckNameAndColor">
+         <div style="display:table-row">
+            <div class="legendColor" style="display:table-cell; background-color: {{color}}"></div>
+            <div style="display:table-cell;line-height: 22px;padding-left:5px">{{name}}</div>
+         </div>
+      </div>
+   </script>
+
+</head>
+<body>
+<div id="loading_panel">Loading...</div>
+<div id="main_panel">
+   <div class="titleText" style="text-align: center; padding-bottom: 20px">Utah Speck Test</div>
+
+   <div id="grapher_area" class="textSelectionDisabled">
+      <table border="0" cellpadding="0" cellspacing="0">
+         <tr>
+            <td rowspan="2">&nbsp;</td>
+            <td valign="bottom">
+               <div style="position:relative; float:right;">
+                  <input id="resetDateAxisButton" type="button" onclick="resetDateAxis()" value="Reset Time Range">
+               </div>
+               <div id="speckNamesAndColors" style="position:relative; margin-top: 0; display:table;"></div>
+            </td>
+            <td rowspan="2" valign="bottom">
+               <div id="timeLabel" style="margin-left: 5px"></div>
+               <div id="yAxisControls">
+                  <input id="unifyYAxesButton" type="button" onclick="unifyYAxes()" value="Unify Y-Axis Ranges" style="margin-left: 5px"><br>
+                  <input id="autoScaleYAxesButton" type="button" onclick="autoScaleYAxes()" value="Fit Plots" style="margin-left: 5px">
+                  <input id="autoScaleLockCheckbox" name="autoScaleLockCheckbox" type="checkbox" onchange="autoScaleLockChange()" value="true"><label class="normalSizeText" for="autoScaleLockCheckbox">Auto fit</label>
+               </div>
+            </td>
+         </tr>
+         <tr>
+            <td width="400">
+               <div id="dateAxisContainer">
+                  <div id="dateAxis"></div>
+               </div>
+            </td>
+         </tr>
+         <tr class="grapherContainer" style="display:none">
+            <td class="rot90 channelLabel">Particles</td>
+            <td valign="top" width="400">
+               <div id="plotContainer1" class="plotContainer">
+                  <div id="pc1" class="plot"></div>
+               </div>
+            </td>
+            <td valign="top" class="yAxesTableContainer">
+               <table border="0" cellpadding="0" cellspacing="0">
+                  <tr id="yAxes1"></tr>
+               </table>
+            </td>
+         </tr>
+         <tr class="grapherContainer" style="display:none">
+            <td class="rot90 channelLabel">Humidity</td>
+            <td valign="top" width="400">
+               <div id="plotContainer2" class="plotContainer">
+                  <div id="pc2" class="plot"></div>
+               </div>
+            </td>
+            <td valign="top" class="yAxesTableContainer">
+               <table border="0" cellpadding="0" cellspacing="0">
+                  <tr id="yAxes2"></tr>
+                  <tr id="yAxesColor"></tr>
+               </table>
+            </td>
+         </tr>
+      </table>
+   </div>
+</div>
+</body>
+</html>
