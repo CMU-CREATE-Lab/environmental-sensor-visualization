@@ -1,1 +1,1 @@
-This corresponds to commit 93ba440 in the BodyTrack Grapher repo's timespan branch.
+Corresponds to commit 3385d53b7199812b9b4a33d62649f1d6195280a4 from the "stripchart" branch.
