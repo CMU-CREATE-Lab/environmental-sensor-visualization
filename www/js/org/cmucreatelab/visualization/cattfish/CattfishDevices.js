@@ -78,7 +78,6 @@ if (!org.cmucreatelab.util.Arrays) {
 
       var globalMinTime = new Date().getTime() / 1000;
       var globalMaxTime = 0;
-      var self = this;
 
       // The "constructor"
       (function() {
@@ -114,11 +113,6 @@ if (!org.cmucreatelab.util.Arrays) {
          return deviceInstallations[name];
       };
 
-      var VALUE_INTERVAL = 1; // TODO
-      this.clampTimeToInterval = function(t) {
-         return t - (t % VALUE_INTERVAL);
-      };
-
       this.getValueAtTime = function(device, timeInSecs) {
          return null;
       };
@@ -149,6 +143,37 @@ if (!org.cmucreatelab.util.Arrays) {
                if (index < 0) {
                   return null;
                }
+            }
+         }
+
+         return {time : times[index], val : conductivityValues[index], temp : temperatureValues[index]};
+      };
+
+      this.getNearestFollowingValueAtTime = function(device, timeInSecs) {
+         var times = device['device']['timestamp_gmt_secs']['values'];
+         var conductivityValues = device['device']['conductivity']['values'];
+         var temperatureValues = device['device']['temp_c']['values'];
+
+         var index = null;
+         if (timeInSecs < times[0]) {
+            index = 0;
+         }
+         else if (timeInSecs > times[times.length - 1]) {
+            return null;
+         }
+         else {
+            index = org.cmucreatelab.util.Arrays.binarySearch(times, timeInSecs, org.cmucreatelab.util.Arrays.NUMERIC_COMPARATOR);
+            if (index < 0) {
+               index = ~index;
+            }
+            else {
+               // If the timeInSecs exists in the times array, then we want the NEXT one.  Need to be careful about
+               // the case were we ask for--and get--the very last element in the array.  There is no next element in
+               // that case, so return null.
+               if (index >= times.length - 1) {
+                  return null;
+               }
+               index = index + 1;
             }
          }
 
