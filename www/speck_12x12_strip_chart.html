@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html>
+<head>
+   <title>Speck 12x12 Grid Test</title>
+   <link href="css/main.css" rel="stylesheet">
+   <style type="text/css">
+      .normalSizeText {
+         font-size: 9pt !important;
+      }
+
+      a {
+         text-decoration: none;
+      }
+
+      .titleText {
+         font-size: 14pt;
+         font-weight: bold;
+         text-align: center;
+      }
+
+      #titleAndLegendArea {
+         padding-left: 10px;
+         width: 600px;
+         max-width: 600px;
+      }
+
+      #animationControls {
+         padding-left: 10px;
+      }
+
+      #timeLabelAndAxisControls {
+         position: relative;
+         height: 90px;
+         min-height: 90px;
+         max-height: 90px;
+      }
+
+      #animationTimeLabel {
+         position: absolute;
+         top: 5px;
+         left: 5px;
+         min-width: 130px;
+         text-align: left;
+         margin: 0;
+      }
+
+      #axisControls {
+         position: absolute;
+         bottom: 5px;
+         left: 5px;
+         display: none;
+         font-size: smaller;
+      }
+
+      #dateAxisContainer {
+         border-top: 1px solid black;
+      }
+
+      .gridRow {
+         display: table-row;
+      }
+
+      .gridCell {
+         display: table-cell;
+         width: 25px;
+         height: 25px;
+         min-width: 25px;
+         min-height: 25px;
+         max-width: 25px;
+         max-height: 25px;
+         line-height: 25px;
+         border: 1px solid rgba(0, 0, 0, 0.5);
+         cursor: pointer;
+         text-align: center;
+      }
+
+      #paletteCanvas {
+         margin-top: 5px;
+         width: 273px;
+         height: 25px;
+         border: 1px solid black;
+      }
+
+      .stripChartPlotContainer {
+         height: 11px;
+         border-bottom: none;
+      }
+
+      .stripChartPlot {
+         height: 11px;
+      }
+
+      .stripChartPlot canvas {
+         position: absolute;
+      }
+
+      .stripChartPlotLabelContainer {
+         font-size: 7pt;
+         height: 12px;
+         line-height: 12px;
+         padding-left: 2px;
+      }
+   </style>
+   <script language="JavaScript" type="text/javascript" src="lib/jquery/jquery-1.10.2.min.js"></script>
+   <script language="JavaScript" type="text/javascript" src="lib/handlebars/handlebars-v1.3.0.js"></script>
+   <script language="JavaScript" type="text/javascript" src="lib/moment.min.js"></script>
+   <script language="JavaScript" type="text/javascript" src="lib/commons-javascript/org/cmucreatelab/events/EventManager.js"></script>
+   <script language="JavaScript" type="text/javascript" src="lib/commons-javascript/org/cmucreatelab/util/Arrays.js"></script>
+   <script language="JavaScript" type="text/javascript" src="lib/commons-javascript/org/cmucreatelab/util/Http.js"></script>
+   <script language="JavaScript" type="text/javascript" src="js/org/bodytrack/grapher/gwt/grapher2.nocache.js"></script>
+   <script language="JavaScript" type="text/javascript" src="js/org/bodytrack/grapher/MultiplotGrapher.js"></script>
+   <script language="JavaScript" type="text/javascript" src="js/org/cmucreatelab/visualization/DataManager.js"></script>
+   <script language="JavaScript" type="text/javascript" src="js/org/cmucreatelab/visualization/speck/SpeckDevices.js"></script>
+   <script language="JavaScript" type="text/javascript" src="js/org/cmucreatelab/visualization/Palette.js"></script>
+   <script language="JavaScript" type="text/javascript">
+
+      var NUM_ROWS = 12;
+      var NUM_COLS = 12;
+
+      // TODO: Load the 2 metadata URLs synchronously
+      var METADATA_URL_1 = "data/speck_12x12_metadata.json";
+      var METADATA_URL_2 = "data/speck_12x12_corners_metadata.json";
+      var DATA_URL = "data/speck_12x12_data.bin";
+
+      var TIMESTAMP_FORMAT = "YYYY-MM-DD HH:mm:ss";
+      var TIMESTAMP_FORMAT_SHORT = "HH:mm:ss";
+
+      var MIN_PARTICLES = 0;
+      var maxParticles = 4000;
+
+      var HSL_RED = 0;
+      var HSL_GREEN = 120;
+
+      var STRIP_CHART_PLOT_HEIGHT = 11;
+
+      var DEFAULT_PALETTE_NAME = "Green - Red 11";
+      var palette = null;
+
+      var deviceNameGrid = [];
+
+      var cornersMetadata = null;
+      var dataManager = null;
+
+      var channelInfoTemplate = null;
+      var yAxisTemplate = null;
+      var yAxisColorTemplate = null;
+      var yAxisInfoTemplate = null;
+      var stripChartPlotTemplate = null;
+      var stripChartPlotLabelTemplate = null;
+      var dateAxis;
+      var grapher;
+      var plotContainer;
+      var timespanGrapher;
+      var timespanPlotContainer;
+      var stripChartGraphers = {};
+      var stripChartPlotContainers = {};
+
+      var currentlySelectedCells = {};
+      var numCurrentlySelectedCells = 0;
+      var availablePlotColors = ["#990000", "#009900", "#000099", "#999900", "#990099", "#999999", "#009999", "#6600ff", "#ff0066"];
+      var MAX_NUM_SELECTED_CELLS = availablePlotColors.length;
+      var usedPlotColorsByDeviceId = {};
+
+      var globalTimeRange = null;
+      var isPlaying = false;
+      var timeoutHandle = null;
+      var t = null;
+
+      var isAutoScaleOn = false;
+
+      window.grapherLoad = loadData;
+
+      function loadData() {
+         $.ajax({
+                   url : METADATA_URL_1,
+                   type : 'GET',
+                   dataType : 'json',
+                   timeout : 5000,
+                   cache : false,
+                   global : false,
+                   success : function(devicesMetadata) {
+                      if (devicesMetadata && devicesMetadata['devices']) {
+
+                         $.each(devicesMetadata['devices'],
+                                function(index, device) {
+                                   var row = device['latitude'];
+                                   var col = device['longitude'];
+                                   if (typeof deviceNameGrid[row] === 'undefined') {
+                                      deviceNameGrid[row] = [];
+                                   }
+                                   deviceNameGrid[row][col] = device['name'];
+                                });
+
+                         loadBinaryData(devicesMetadata);
+                      }
+                      else {
+                         console.log("Failed to load " + METADATA_URL_1);
+                      }
+                   },
+                   error : function() {
+                      console.log("Failed to load " + METADATA_URL_1);
+                   }
+                });
+      }
+
+      function loadBinaryData(devicesMetadata) {
+         org.cmucreatelab.util.Http.loadArrayBuffer(DATA_URL,
+                                                    {
+                                                       success : function(arrayBuffer) {
+                                                          console.log("loadArrayBuffer SUCCESS!");
+                                                          var devices = new org.cmucreatelab.visualization.speck.SpeckDevices(devicesMetadata, arrayBuffer);
+                                                          dataManager = new org.cmucreatelab.visualization.DataManager(devices);
+
+                                                          loadCornersData();
+                                                       },
+                                                       failure : function(requestStatus) {
+                                                          // TODO: do something better
+                                                          alert("Failed to load the data from [" + DATA_URL + "] (Request Status: " + requestStatus + ")");
+                                                       }
+                                                    });
+      }
+
+      function loadCornersData() {
+         $.ajax({
+                   url : METADATA_URL_2,
+                   type : 'GET',
+                   dataType : 'json',
+                   timeout : 5000,
+                   cache : false,
+                   global : false,
+                   success : function(metadata) {
+                      if (metadata && metadata['devices']) {
+
+                         cornersMetadata = metadata;
+
+                         // now that all the data is loaded, go ahead and initialize the page
+                         initialize();
+                      }
+                      else {
+                         console.log("Failed to load " + METADATA_URL_2);
+                      }
+                   },
+                   error : function() {
+                      console.log("Failed to load " + METADATA_URL_2);
+                   }
+                });
+      }
+
+      function initialize() {
+         $("#loading_panel").hide();
+         $("#main_panel").show();
+
+         initializeGrid();
+
+         // compile the templates for later use
+         channelInfoTemplate = Handlebars.compile($("#channel_info_template").html());
+         yAxisTemplate = Handlebars.compile($("#y_axis_template").html());
+         yAxisColorTemplate = Handlebars.compile($("#y_axis_color_template").html());
+         yAxisInfoTemplate = Handlebars.compile($("#y_axis_info_template").html());
+         stripChartPlotTemplate = Handlebars.compile($("#strip_chart_plot_template").html());
+         stripChartPlotLabelTemplate = Handlebars.compile($("#strip_chart_plot_label_template").html());
+
+         // configure the DataManager
+         dataManager.addDataChangeListener(function(valuesMap) {
+            $.each(valuesMap, function(name, value) {
+               $("#" + name).css("background-color", (value === null) ? "white" : palette.getColorForValue(value));
+            });
+         });
+
+         // initialize the DateAxis, Grapher, and PlotContainer
+         globalTimeRange = dataManager.getGlobalTimeRange();
+         dateAxis = new DateAxis("dateAxis", "horizontal", {"min" : globalTimeRange['min'], "max" : globalTimeRange['max']});
+         dateAxis.addAxisChangeListener(function(cursorChangeEvent) {
+            // set the animation time here so that the user can click the plot to affect the animation playback position
+            t = cursorChangeEvent['cursorPosition'];
+            displayAnimationTime(t);
+
+            // notify the data manager of the axis change
+            dataManager.setTimeRange({
+                                        "min" : cursorChangeEvent['min'],
+                                        "max" : cursorChangeEvent['max'],
+                                        "cursorPosition" : cursorChangeEvent['cursorPosition']
+                                     });
+
+            // auto-scale the y-axes
+            if (isAutoScaleOn) {
+               autoScaleYAxes();
+            }
+         });
+
+         grapher = new org.bodytrack.grapher.MultiplotGrapher(dateAxis);
+         timespanGrapher = new org.bodytrack.grapher.MultiplotGrapher(dateAxis);
+         plotContainer = new PlotContainer("pc1", false, []);
+         timespanPlotContainer = new PlotContainer("timespanPlot", false, []);
+
+         initializeAnnotations();
+
+         // make sure the palette's canvas has the right dimensions
+         var paletteCanvas = $("#paletteCanvas");
+         var paletteCanvasElem = paletteCanvas.get(0);
+         paletteCanvasElem.width = paletteCanvas.width();
+         paletteCanvasElem.style.width = paletteCanvas.width() + "px";
+         paletteCanvasElem.height = paletteCanvas.height();
+         paletteCanvasElem.style.height = paletteCanvas.height() + "px";
+
+         setPalette(DEFAULT_PALETTE_NAME);
+
+         var paletteSelectMenu = org.cmucreatelab.visualization.Palette.createSelectMenu("paletteChooser", DEFAULT_PALETTE_NAME);
+         $("#paletteSelector").append(paletteSelectMenu);
+         paletteSelectMenu.change(changePalette);
+
+         // show the grapher area
+         $("#grapher_area").show();
+
+         setSizes();
+
+         dateAxis.setCursorPosition(globalTimeRange['min']);
+
+         // call setSizes() again to fix the layout
+         setSizes();
+
+         // set up window resize handler
+         $(window).resize(setSizes);
+      }
+
+      function setPalette(canvasIdentifier) {
+         palette = new org.cmucreatelab.visualization.Palette(MIN_PARTICLES, maxParticles, canvasIdentifier);
+         palette.addEventListener("palette-range-change", handlePaletteChange);
+         handlePaletteChange();
+      }
+
+      function initializeGrid() {
+         // compile the templates for later use
+         var gridRowTemplate = Handlebars.compile($("#grid_row_template").html());
+         var gridCellTemplate = Handlebars.compile($("#grid_cell_template").html());
+
+         var gridArea = $("#gridArea");
+
+         for (var rowNum = 0; rowNum < NUM_ROWS; rowNum++) {
+            var row = $(gridRowTemplate());
+
+            for (var colNum = 0; colNum < NUM_COLS; colNum++) {
+               var id = deviceNameGrid[rowNum][colNum];
+               var cell = $(gridCellTemplate({ id : id, prettyName : "Speck " + dataManager.findByName(id)['prettyName'] }));
+               createCellEventHandlers(cell);
+               row.append(cell);
+            }
+
+            gridArea.append(row);
+         }
+
+         // now set up the four corners
+         $.each(cornersMetadata['devices'], function(id) {
+            createCellEventHandlers($("#" + id));
+         });
+      }
+
+      function createCellEventHandlers(cell) {
+         cell.mouseenter(function() {
+            $(this).css("outline", "2px solid red");
+            $("#yAxis" + this.id + "_channel_info_container").css("outline", "2px solid red");
+
+         });
+         cell.mouseleave(function() {
+            if (currentlySelectedCells.hasOwnProperty(this.id)) {
+               $(this).css("outline", "2px solid black");
+            }
+            else {
+               $(this).css("outline", "none");
+            }
+            $("#yAxis" + this.id + "_channel_info_container").css("outline", "none");
+         });
+         cell.click(function() {
+            // if the selected cell is already selected, then remove it
+            if (currentlySelectedCells.hasOwnProperty(this.id)) {
+               setCellSelected(this.id, currentlySelectedCells[this.id], false);
+            }
+            else {
+               if (numCurrentlySelectedCells < MAX_NUM_SELECTED_CELLS) {
+                  setCellSelected(this.id, $("#" + this.id), true);
+               }
+            }
+         });
+
+      }
+
+      function initializeAnnotations() {
+         var commentChannel = {
+            "min" : 0,
+            "max" : 1,
+            "time_type" : "utc",
+            "style" : {
+               "styles" : [
+                  {
+                     "type" : "lollipop",
+                     "color" : "#000000",
+                     "radius" : 1,
+                     "lineWidth" : 1,
+                     "fill" : false
+                  }
+               ],
+               "comments" : {
+                  "show" : true,
+                  "verticalMargin" : 4,
+                  "styles" : [
+                     {
+                        "type" : "point",
+                        "lineWidth" : 1,
+                        "radius" : 2,
+                        "fill" : true,
+                        "show" : true
+                     }
+                  ]
+               },
+               "highlight" : {
+                  "lineWidth" : 1,
+                  "styles" : [
+                     {
+                        "type" : "lollipop",
+                        "color" : "#000000",
+                        "radius" : 3,
+                        "lineWidth" : 3,
+                        "fill" : true
+                     }
+                  ]
+               }
+            }
+         };
+         var timespanChannel = {
+            "min" : 0,
+            "max" : 1,
+            "time_type" : "utc",
+            "style" : {
+               "timespanStyles" : {
+                  "defaultStyle" : {
+                     "borderWidth" : 0,
+                     "borderColor" : "#000000",
+                     "fillColor" : "#000000",
+                     "top" : 0,
+                     "bottom" : 1.0
+                  },
+                  "values" : {
+                     "people_movement" : {
+                        "borderColor" : "#666666",
+                        "fillColor" : "#666666",
+                        "top" : 1.0,
+                        "bottom" : 0.666666
+                     },
+                     "particle_generator" : {
+                        "borderColor" : "#999999",
+                        "fillColor" : "#999999",
+                        "top" : 0.666666,
+                        "bottom" : 0.333333
+                     },
+                     "air_filter" : {
+                        "borderColor" : "#cccccc",
+                        "fillColor" : "#cccccc",
+                        "top" : 0.333333,
+                        "bottom" : 0.0
+                     }
+                  }
+               }
+            }
+         };
+         var channelDatasource =
+               function(level, offset, successCallback) {
+                  var json = {
+                     "data" : [
+                        {
+                           "start" : 1383316500,
+                           "end" : 1383317160,
+                           "value" : "people_movement",
+                           "objectType" : "speck_timespan_event"
+                        },
+                        {
+                           "start" : 1383317415,
+                           "end" : 1383317750,
+                           "value" : "particle_generator",
+                           "objectType" : "speck_timespan_event"
+                        },
+                        {
+                           "start" : 1383318429,
+                           "end" : 1383319958,
+                           "value" : "air_filter",
+                           "objectType" : "speck_timespan_event"
+                        },
+                        {
+                           "start" : 1383319998,
+                           "end" : 1383320247,
+                           "value" : "particle_generator",
+                           "objectType" : "speck_timespan_event"
+                        }
+                     ], "type" : "timespan"
+                  };
+
+                  successCallback(JSON.stringify(json));
+               };
+         var commentDatasource =
+               function(level, offset, successCallback) {
+                  var json = {
+                     "fields" : ["time", "mean", "stddev", "count", "comment"],
+                     "level" : level,
+                     "offset" : offset,
+                     "sample_width" : Math.pow(2, level),
+                     "data" : [
+                        [1383316500, 1, 0, 1, "Left the room to let things settle down"],
+                        [1383317160, 1, 0, 1, "Re-entered the room"],
+                        [1383317415, 0.666666, 0, 1, "Started vacuum"],
+                        [1383317750, 0.666666, 0, 1, "Stopped vacuum"],
+                        [1383318429, 0.333333, 0, 1, "Turned on air filter"],
+                        [1383319958, 0.333333, 0, 1, "Turned off air filter"],
+                        [1383319998, 0.666666, 0, 1, "Began lighting candles"],
+                        [1383320101, 0.666666, 0, 1, "Finished lighting candles"],
+                        [1383320247, 0.666666, 0, 1, "Blew out candles"]
+                     ],
+                     "type" : "value"
+                  };
+
+                  successCallback(JSON.stringify(json));
+               };
+         timespanGrapher.addTimespanPlot("timespan_plot", timespanChannel, channelDatasource, "timespanYAxis");
+         timespanGrapher.addDataPointListener("timespan_plot", function(evt1, evt2) {
+            console.log("evt1: " + JSON.stringify(evt1, null, 3));
+            console.log("evt2: " + JSON.stringify(evt2, null, 3));
+         });
+         timespanPlotContainer.addPlot(timespanGrapher.getPlot("timespan_plot"));
+
+         timespanGrapher.addPlot("timespan_comment_plot", commentChannel, commentDatasource, "timespanCommentsYAxis");
+         timespanPlotContainer.addPlot(timespanGrapher.getPlot("timespan_comment_plot"));
+
+         // Don't want the padding, so just force the range to [min,max]
+         var timespanYAxis = timespanGrapher.getYAxis("timespan_plot");
+         var timespanCommentYAxis = timespanGrapher.getYAxis("timespan_comment_plot");
+         timespanYAxis.setRange(timespanChannel['min'], timespanChannel['max']);
+         timespanCommentYAxis.setRange(commentChannel['min'], commentChannel['max']);
+
+         // Prevent changing the y axis ranges for the annotations plots
+         timespanYAxis.addAxisChangeListener(function(o1) {
+            if (o1 && (o1['min'] != timespanChannel['min'] || o1['max'] != timespanChannel['max'])) {
+               timespanYAxis.setRange(timespanChannel['min'], timespanChannel['max']);
+            }
+         });
+         timespanCommentYAxis.addAxisChangeListener(function(o1) {
+            if (o1 && (o1['min'] != commentChannel['min'] || o1['max'] != commentChannel['max'])) {
+               timespanCommentYAxis.setRange(commentChannel['min'], commentChannel['max']);
+            }
+         });
+
+         setSizes();
+      }
+
+      function setCellSelected(id, cell, isSelected) {
+         cell.css("outline", isSelected ? "2px solid black" : "none")
+
+         if (isSelected) {
+            currentlySelectedCells[id] = cell;
+         }
+         else {
+            delete currentlySelectedCells[id];
+         }
+         numCurrentlySelectedCells = numCurrentlySelectedCells + (isSelected ? 1 : -1);
+
+         // finally, add or remove the channel as appropriate
+         (isSelected) ? loadChannel(id) : removeChannel(id);
+      }
+
+      function removeChannel(id) {
+         var plot = grapher.getPlot(id);
+         if (typeof plot !== 'undefined' && plot != null) {
+            plotContainer.removePlot(plot);
+         }
+         grapher.removePlot(id);
+         stripChartPlotContainers[id].removePlot(stripChartGraphers[id].getPlot(id));
+         stripChartGraphers[id].removePlot(id);
+         delete stripChartPlotContainers[id];
+         delete stripChartGraphers[id];
+         $("#" + getYAxisElementId(id) + "_container").remove();
+         $("#" + getYAxisElementId(id) + "_color_container").remove();
+         $("#" + getYAxisElementId(id) + "_info_container").remove();
+         $("#" + getYAxisElementId(id) + "_channel_info_container").remove();
+         $("#stripChartPlotContainer_" + id).remove();
+         $("#stripChartPlotLabelContainer_" + id).remove();
+
+         returnPlotColor(id);
+
+         if (numCurrentlySelectedCells <= 0) {
+            $("#grapherContainer").hide();
+            $("#channelInfosContainer").hide();
+            $("#axisControls").hide();
+         }
+         setSizes();
+      }
+
+      function reservePlotColor(id) {
+         var color = availablePlotColors.splice(0, 1)[0];
+         usedPlotColorsByDeviceId[id] = color;
+         return color;
+      }
+
+      function returnPlotColor(id) {
+         availablePlotColors.push(usedPlotColorsByDeviceId[id]);
+         delete usedPlotColorsByDeviceId[id];
+      }
+
+      function getYAxisElementId(id) {
+         // WARNING! This assumes that the id has no spaces and that the
+         // line below will produce a legal value for a DOM element id
+         return  "yAxis" + id;
+      }
+
+      function loadChannel(id) {
+         console.log("loadChannel(" + id + ")");
+
+         var isCorner = false;
+         var device = dataManager.findByName(id);
+         var channelDatasource = null;
+         if (device == null) {
+            isCorner = true;
+            device = cornersMetadata['devices'][id];
+            channelDatasource =
+            function(level, offset, successCallback) {
+               var json = {
+                  "fields" : ["time", "mean", "stddev", "count"],
+                  "level" : level,
+                  "offset" : offset,
+                  "sample_width" : Math.pow(2, level),
+                  "data" : device['data'],
+                  "type" : "value"
+               };
+
+               successCallback(JSON.stringify(json));
+            };
+         }
+         else {
+            channelDatasource = dataManager.getChannelDatasource(id);
+         }
+
+         var yAxisElementId = getYAxisElementId(id);
+         var plotColor = reservePlotColor(id);
+
+         $("#yAxes").append(yAxisTemplate({"yAxisElementId" : yAxisElementId}));
+         $("#yAxesColor").append(yAxisColorTemplate({"yAxisElementId" : yAxisElementId, color : plotColor}));
+         $("#yAxesInfo").append(yAxisInfoTemplate({"yAxisElementId" : yAxisElementId}));
+         var channelInfoBox = $(channelInfoTemplate({
+                                                       "yAxisElementId" : yAxisElementId,
+                                                       device : device,
+                                                       prettyName : isCorner ? device['prettyName'] : "Speck " + device['prettyName'],
+                                                       color : plotColor,
+                                                       minValueTimeFormatted : moment.unix(device['minValueTime']).format(TIMESTAMP_FORMAT_SHORT),
+                                                       maxValueTimeFormatted : moment.unix(device['maxValueTime']).format(TIMESTAMP_FORMAT_SHORT)
+                                                    }));
+         $("#channelInfos").append(channelInfoBox);
+         $("#" + yAxisElementId + "_channel_info_close_button").click(function() {
+            setCellSelected(id, currentlySelectedCells[id], false)
+         });
+
+         channelInfoBox.mouseenter(
+               function() {
+                  $("#" + id).css('outline', '2px solid red')
+               }).mouseleave(
+               function() {
+                  $("#" + id).css('outline', '2px solid black')
+               });
+
+         var channel = {
+            "min" : device['minValue'],
+            "max" : device['maxValue'],
+            "time_type" : "utc",
+            "style" : {
+               "styles" : [
+                  {"type" : "line", "lineWidth" : 1, "show" : true, "color" : plotColor}
+               ],
+               "highlight" : {
+                  "lineWidth" : 1,
+                  "styles" : [
+                     {
+                        "type" : "lollipop",
+                        "color" : "#000000",
+                        "radius" : 1,
+                        "lineWidth" : 1,
+                        "fill" : false
+                     },
+                     {
+                        "show" : true,
+                        "type" : "value",
+                        "fillColor" : "#000000",
+                        "marginWidth" : 10,
+                        "font" : "7pt Helvetica,Arial,Verdana,sans-serif",
+                        "verticalOffset" : 7,
+                        "numberFormat" : "###,##0"
+                     }
+                  ]
+               }
+            }
+         };
+
+         if (isCorner) {
+            channel['style']['styles'].push({
+                                               "type" : "circle",
+                                               "lineWidth" : 1,
+                                               "radius" : 2,
+                                               "fill" : true,
+                                               "show" : true,
+                                               "fillColor" : plotColor,
+                                               "color" : plotColor
+                                            }
+            );
+         }
+         grapher.addPlot(id, channel, channelDatasource, yAxisElementId);
+         grapher.addDataPointListener(id, displayTimeForDataPoint);
+         grapher.addDataPointListener(id, function(val) {
+            displayValueForDataPoint(id, val ? val['value'] : null);
+         });
+         plotContainer.addPlot(grapher.getPlot(id));
+
+         loadStripChartChannel(device);
+
+         $("#grapherContainer").show();
+         $("#channelInfosContainer").show();
+         $("#axisControls").show();
+
+         setSizes();
+      }
+
+      function loadStripChartChannel(device) {
+
+         // get the device ID
+         var id = device['name'];
+
+         // create the DOM element which will contain this strip chart plot
+         var stripChartPlotElement = $(stripChartPlotTemplate({ id : id }));
+         var stripChartPlotLabelElement = $(stripChartPlotLabelTemplate({ id : id, name : "Speck " + device['prettyName'] }));
+         $("#stripChartPlots").append(stripChartPlotElement);
+         $("#stripChartPlotLabels").append(stripChartPlotLabelElement);
+
+         var channel = {
+            "min" : device['minValue'],
+            "max" : device['maxValue'],
+            "time_type" : "utc",
+            "style" : {
+               "styles" : [
+                  {"type" : "strip", "show" : true, "stripPosition" : "trailing", "stripWidthSecs" : "1", "rangedColors" : palette.getRangedColorsString()}
+               ]
+            }
+         };
+         var channelDatasource = dataManager.getChannelDatasource(id);
+
+         stripChartGraphers[id] = new org.bodytrack.grapher.MultiplotGrapher(dateAxis);
+         stripChartPlotContainers[id] = new PlotContainer("stripChartPlot_" + id, false, []);
+         var stripChartGrapher = stripChartGraphers[id];
+         var stripChartPlotContainer = stripChartPlotContainers[id];
+
+         stripChartGrapher.addPlot(id, channel, channelDatasource, "stripChartYAxis");
+         stripChartPlotContainer.addPlot(stripChartGrapher.getPlot(id));
+
+         // Don't want the padding, so just force the range to [min,max]
+         var stripChartYAxis = stripChartGrapher.getYAxis(id);
+         stripChartYAxis.setRange(channel['min'], channel['max']);
+
+         // Prevent changing the y axis ranges for the strip chart plots
+         stripChartYAxis.addAxisChangeListener(function(o1) {
+            if (o1 && (o1['min'] != channel['min'] || o1['max'] != channel['max'])) {
+               stripChartYAxis.setRange(channel['min'], channel['max']);
+            }
+         });
+      }
+
+      function displayValueForDataPoint(id, val) {
+         var yAxisElementId = getYAxisElementId(id);
+         if (val) {
+            $("#" + yAxisElementId + "_valueLabelText").show().html(val);
+            $("#" + yAxisElementId + "_valueLabelColor").show().css('background-color', palette.getColorForValue(val));
+         }
+         else {
+            $("#" + yAxisElementId + "_valueLabelText").hide();
+            $("#" + yAxisElementId + "_valueLabelColor").hide();
+         }
+      }
+
+      function displayTimeForDataPoint(val) {
+         $("#timeLabel").html(val ? moment.unix(val['date']).format(TIMESTAMP_FORMAT) : "");
+      }
+
+      function displayAnimationTime(val) {
+         $("#animationTimeLabel").html(val ? moment.unix(val).format(TIMESTAMP_FORMAT) : "");
+      }
+
+      function setSizes() {
+         var axisControlsElement = $("#axisControls");
+         var axisControlsWidth = axisControlsElement.is(":visible") ? axisControlsElement.width() : 0;
+         var animationTimeLabelWidth = $("#animationTimeLabel").width();
+         var timeLabelAndAxisControlsWidth = Math.max(axisControlsWidth, animationTimeLabelWidth);
+         $("#timeLabelAndAxisControls").width(timeLabelAndAxisControlsWidth);
+         var yAxesTableContainerWidth = $("#yAxesTableContainer").width();
+         var plotContainerWidth = $(window).width() - 20 - Math.max(timeLabelAndAxisControlsWidth, Math.max(yAxesTableContainerWidth, axisControlsWidth)) - 2;
+         var plotContainerHeight = $("#column0").height() - 2;
+
+         // resize date axis, plot container, and y axes
+         dateAxis.setSize(plotContainerWidth, $("#dateAxis").height(), SequenceNumber.getNext());
+         plotContainer.setSize(plotContainerWidth, plotContainerHeight, SequenceNumber.getNext());
+         grapher.updateYAxesSizes();
+         timespanPlotContainer.setSize(plotContainerWidth, 50, SequenceNumber.getNext());
+         timespanGrapher.updateYAxesSizes();
+         $.each(stripChartPlotContainers, function(id, stripChartPlotContainer) {
+            stripChartPlotContainer.setSize(plotContainerWidth, STRIP_CHART_PLOT_HEIGHT, SequenceNumber.getNext());
+         });
+         $(".channelInfo").width(plotContainerWidth / MAX_NUM_SELECTED_CELLS);
+      }
+
+      function jumpToTime(time) {
+         var dateAxisHalfRange = (dateAxis.getMax() - dateAxis.getMin()) / 2;
+         dateAxis.setCursorPosition(time);
+         dateAxis.setRange(time - dateAxisHalfRange, time + dateAxisHalfRange);
+      }
+
+      function play() {
+         if (!isPlaying) {
+            isPlaying = true;
+            t = dateAxis.getCursorPosition();
+            if (t >= dateAxis.getMax()) {
+               t = dateAxis.getMin();
+            }
+            $("#playButton").val("Stop");
+            computeAndRenderNextGeneration();
+         }
+         else {
+            isPlaying = false;
+            $("#playButton").val("Play");
+            window.clearTimeout(timeoutHandle);
+            timeoutHandle = null;
+         }
+      }
+
+      function computeAndRenderNextGeneration() {
+         if (t < dateAxis.getMax()) {
+            t += 1;
+            if (t < dateAxis.getMax()) {
+               dateAxis.setCursorPosition(t);
+            }
+            else {
+               dateAxis.setCursorPosition(dateAxis.getMax());
+               play();
+            }
+         }
+         else {
+            dateAxis.setCursorPosition(dateAxis.getMax());
+            play();
+         }
+
+         if (isPlaying) {
+            window.clearTimeout(timeoutHandle);
+            timeoutHandle = window.setTimeout(computeAndRenderNextGeneration, $("#animationIntervalMillis").val());
+         }
+      }
+
+      function resetDateAxis() {
+         dateAxis.setRange(globalTimeRange['min'], globalTimeRange['max']);
+      }
+
+      function unifyYAxes() {
+         var min = Number.MAX_VALUE;
+         var max = Number.MIN_VALUE;
+         var isInNeedOfUnification = false;
+         grapher.forEachPlot(function(plot) {
+            var stats = plot.getStatistics(dateAxis.getMin(), dateAxis.getMax());
+            if (typeof stats['y_min'] !== 'undefined' && typeof stats['y_max'] !== 'undefined') {
+               min = Math.min(min, stats['y_min']);
+               max = Math.max(max, stats['y_max']);
+               isInNeedOfUnification = true;
+            }
+         });
+
+         if (isInNeedOfUnification) {
+            var paddedRange = paddedYAxisRange(min, max);
+
+            grapher.forEachPlot(function(plot, yAxis) {
+               yAxis.setRange(paddedRange['min'], paddedRange['max']);
+            });
+         }
+      }
+
+      function autoScaleYAxes() {
+         grapher.forEachPlot(function(plot, yAxis) {
+            var stats = plot.getStatistics(dateAxis.getMin(), dateAxis.getMax());
+
+            if (typeof stats['y_min'] !== 'undefined' && typeof stats['y_max'] !== 'undefined') {
+               var paddedRange = paddedYAxisRange(stats['y_min'], stats['y_max']);
+               yAxis.setRange(paddedRange['min'], paddedRange['max']);
+            }
+         });
+      }
+
+      function autoScaleLockChange() {
+         isAutoScaleOn = $("#autoScaleLockCheckbox").is(":checked");
+         if (isAutoScaleOn) {
+            autoScaleYAxes();
+            $("#autoScaleYAxesButton").attr("disabled", "disabled");
+         }
+         else {
+            $("#autoScaleYAxesButton").removeAttr("disabled");
+         }
+      }
+
+      function paddedYAxisRange(min, max) {
+         var yDiff = max - min;
+         var padding = 0.5;
+         if (yDiff < 1e-10) {
+            padding = 0.5;
+         }
+         else {
+            padding = 0.05 * yDiff;
+         }
+         return {min : min - padding, max : max + padding}
+      }
+
+      function removeAllSelections() {
+         for (var id in currentlySelectedCells) {
+            var cell = currentlySelectedCells[id];
+            setCellSelected(id, cell, false);
+         }
+      }
+
+      function handlePaletteChange() {
+         // If we have selected markers, then update the strip charts with the new palette.  Do this
+         // by asking the palette for the ranged colors string, and then setting the style for each
+         // strip chart plot.
+         if (numCurrentlySelectedCells > 0) {
+            var rangedColorsString = palette.getRangedColorsString();
+            $.each(stripChartGraphers, function(id, grapher) {
+               var plot = grapher.getPlot(id);
+               var style = plot.getStyle();
+               style['styles'][0]['rangedColors'] = rangedColorsString;
+               plot.setStyle(style);
+            });
+         }
+
+         palette.renderToCanvas("paletteCanvas");
+      }
+
+      function changePalette() {
+         setPalette($("#paletteChooser").val());
+         dataManager.triggerDataChangeEvent();
+      }
+
+      function changeMaxParticles() {
+         palette.setMaxValue($("#maxParticlesChooser").val());
+         dataManager.triggerDataChangeEvent();
+      }
+   </script>
+
+   <script id="grid_row_template" type="text/x-handlebars-template">
+      <div class="gridRow"></div>
+   </script>
+
+   <script id="grid_cell_template" type="text/x-handlebars-template">
+      <div id="{{id}}" class="gridCell" title="{{prettyName}}"></div>
+   </script>
+
+   <script id="y_axis_template" type="text/x-handlebars-template">
+      <td id="{{yAxisElementId}}_container" class="axisCell">
+         <div class="yAxisContainer">
+            <div id="{{yAxisElementId}}" class="yAxis"></div>
+         </div>
+      </td>
+   </script>
+
+   <script id="y_axis_color_template" type="text/x-handlebars-template">
+      <td id="{{yAxisElementId}}_color_container">
+         <div class="yAxisColor" style="background-color:{{color}}"></div>
+      </td>
+   </script>
+
+   <script id="y_axis_info_template" type="text/x-handlebars-template">
+      <td id="{{yAxisElementId}}_info_container">
+         <table border="0" cellpadding="0" cellspacing="0" align="right">
+            <tr>
+               <td>
+                  <div id="{{yAxisElementId}}_valueLabelText" class="valueLabelText"></div>
+               </td>
+               <td>
+                  <div id="{{yAxisElementId}}_valueLabelColor" class="valueLabelColor"></div>
+               </td>
+            </tr>
+         </table>
+      </td>
+   </script>
+
+   <script id="strip_chart_plot_template" type="text/x-handlebars-template">
+      <div id="stripChartPlotContainer_{{id}}" class="plotContainer stripChartPlotContainer">
+         <div id="stripChartPlot_{{id}}" class="stripChartPlot"></div>
+      </div>
+   </script>
+
+   <script id="strip_chart_plot_label_template" type="text/x-handlebars-template">
+      <div id="stripChartPlotLabelContainer_{{id}}" class="stripChartPlotLabelContainer">{{name}}</div>
+   </script>
+
+   <script id="channel_info_template" type="text/x-handlebars-template">
+      <div id="{{yAxisElementId}}_channel_info_container" class="channelInfo">
+         <div class="yAxisColor" style="background-color:{{color}};border-right:none"></div>
+         <div id="{{yAxisElementId}}_channel_info_close_button" class="closeButton" style="float:right;margin-right:3px"></div>
+         <div class="deviceName" style="margin-left:3px"><b>{{prettyName}}</b></div>
+         <div style="padding:3px">
+            <table border="0" cellpadding="0" cellspacing="0" align="center">
+               <tr>
+                  <th class="channelInfoLabel">Min</th>
+                  <th rowspan="3">&nbsp;&nbsp;&nbsp;</th>
+                  <th class="channelInfoLabel">Max</th>
+               </tr>
+               <tr align="center">
+                  <td><a href="#" onclick="jumpToTime({{device.minValueTime}}); return false;">{{device.minValue}}</a></td>
+                  <td><a href="#" onclick="jumpToTime({{device.maxValueTime}}); return false;">{{device.maxValue}}</a></td>
+               </tr>
+               <tr align="center">
+                  <td><a href="#" onclick="jumpToTime({{device.minValueTime}}); return false;">{{minValueTimeFormatted}}</a></td>
+                  <td><a href="#" onclick="jumpToTime({{device.maxValueTime}}); return false;">{{maxValueTimeFormatted}}</a></td>
+               </tr>
+            </table>
+         </div>
+      </div>
+   </script>
+</head>
+<body>
+
+<div id="loading_panel">Loading...</div>
+<div id="main_panel">
+   <div id="grapher_area" class="textSelectionDisabled">
+      <table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 5px">
+         <tr>
+            <td>
+               <div id="Corner3" class="gridCell" title="Corner 3">C3</div>
+            </td>
+            <td>&nbsp;</td>
+            <td>
+               <div id="Corner4" class="gridCell" title="Corner 4">C4</div>
+            </td>
+            <td rowspan="2" valign="top">
+               <div id="titleAndLegendArea">
+                  <div class="titleText">12 x 12 Grid Speck Test</div>
+                  <div class="normalSizeText">
+                     <p>
+                        We arranged 144 Specks in a 12 x 12 grid (see
+                        <a href="http://create.posthaven.com/speck-air-quality-test" target="speck12x12blogpost">photos</a>)
+                        to test how particles flow through the room. The Specks
+                        recorded samples once per second. The colored cells on the grid represent the values recorded. We also took periodic
+                        readings in the corners of the grid with a Hach MET ONE HHPC-6 particle counter--those readings are
+                        represented in the four corner cells labeled C1, C2, C3, and C4.
+                     </p>
+                     <p>
+                        Click on a cell to show/hide the plot for that location. You may select up to nine at a time to compare.
+                        Click on the date range to jump to a particular time. Drag the red triangular cursor on the date
+                        range to animate the values, or click on the Play button below. You can scroll on the date axis or
+                        y-axes to zoom the plots. The grey bars on the plot below the date axis show the start and end times of the test events.
+                     </p>
+                     <p>
+                        During the vacuum test, we vacuumed the floor at the front of the room in the area between cells C3 and C4. For the candle test,
+                        the 12 tealight candles were located in the center of the room between Speck 146 and Speck 126.
+                     </p>
+                  </div>
+                  <div style="text-align:center">
+                     <table border="0" cellpadding="0" cellspacing="0" style="width:275px" align="center">
+                        <tr>
+                           <td colspan="2" style="font-size:10pt;" align="center">Particle Count Range</td>
+                        </tr>
+                        <tr>
+                           <td class="normalSizeText" align="left">Min: 0</td>
+                           <td class="normalSizeText" align="right">
+                              Max:
+                              <select id="maxParticlesChooser" onchange="changeMaxParticles()">
+                                 <option value="500">500</option>
+                                 <option value="750">750</option>
+                                 <option value="1000">1000</option>
+                                 <option value="2000">2000</option>
+                                 <option value="3000">3000</option>
+                                 <option value="4000" selected="selected">4000</option>
+                                 <option value="5000">5000</option>
+                                 <option value="6000">6000</option>
+                                 <option value="7000">7000</option>
+                                 <option value="8000">8000</option>
+                                 <option value="9000">9000</option>
+                                 <option value="10000">10000</option>
+                              </select>
+                           </td>
+                        </tr>
+                     </table>
+                     <canvas id="paletteCanvas"></canvas>
+                     <div id="paletteSelector" class="normalSizeText" style="text-align: center">
+                        Palette:
+                     </div>
+                  </div>
+               </div>
+            </td>
+         </tr>
+         <tr>
+            <td>&nbsp;</td>
+            <td>
+               <div id="gridArea"></div>
+            </td>
+            <td>&nbsp;</td>
+         </tr>
+         <tr>
+            <td>
+               <div id="Corner2" class="gridCell" title="Corner 2">C2</div>
+            </td>
+            <td>&nbsp;</td>
+            <td>
+               <div id="Corner1" class="gridCell" title="Corner 1">C1</div>
+            </td>
+            <td valign="bottom">
+               <div id="animationControls">
+                  <input id="playButton" type="button" onclick="play()" value="Play">
+                  <select id="animationIntervalMillis">
+                     <option value="1000">1x</option>
+                     <option value="200">5x</option>
+                     <option value="100">10x</option>
+                     <option value="50">20x</option>
+                     <option value="20" selected="selected">50x</option>
+                     <option value="10">100x</option>
+                  </select>
+                  <input id="resetDateAxisButton" type="button" onclick="resetDateAxis()" value="Reset Time Range" style="margin-left: 20px;">
+               </div>
+            </td>
+         </tr>
+      </table>
+      <table border="0" cellpadding="0" cellspacing="0">
+         <tr>
+            <td>
+               <div id="dateAxisContainer">
+                  <div id="dateAxis"></div>
+               </div>
+            </td>
+            <td rowspan="2" valign="top">
+               <div id="timeLabelAndAxisControls">
+                  <div id="animationTimeLabel"></div>
+                  <div id="axisControls">
+                     <input id="unifyYAxesButton" type="button" onclick="unifyYAxes()" value="Unify Y-Axis Ranges"><br>
+                     <input id="autoScaleYAxesButton" type="button" onclick="autoScaleYAxes()" value="Fit Plots">
+                     <input id="autoScaleLockCheckbox" name="autoScaleLockCheckbox" type="checkbox" onchange="autoScaleLockChange()" value="true">Auto fit
+                  </div>
+               </div>
+            </td>
+         </tr>
+         <tr>
+            <td>
+               <div id="timespanPlotContainer" class="plotContainer timespanPlotContainer">
+                  <div id="timespanPlot" class="timespanPlot"></div>
+               </div>
+            </td>
+         </tr>
+         <tr id="stripChartPlotsAndLabels">
+            <td>
+               <div id="stripChartPlots">
+               </div>
+            </td>
+            <td>
+               <div id="stripChartPlotLabels">
+               </div>
+            </td>
+         </tr>
+         <tr id="grapherContainer" style="display:none">
+            <td id="column0">
+               <div id="plotContainer1" class="plotContainer">
+                  <div id="pc1" class="plot"></div>
+               </div>
+            </td>
+            <td rowspan="2" valign="top" id="yAxesTableContainer">
+               <table id="yAxesTable" border="0" cellpadding="0" cellspacing="0">
+                  <tr id="yAxes"></tr>
+                  <tr id="yAxesColor"></tr>
+                  <tr id="yAxesInfo"></tr>
+               </table>
+               <div id="timeLabel" style="text-align: left"></div>
+            </td>
+         </tr>
+         <tr id="channelInfosContainer" valign="top" style="display:none">
+            <td>
+               <div id="channelInfos" style="display: table-row"></div>
+               <input id="removeAllSelectionsButton" type="button" onclick="removeAllSelections()" value="Remove All" style="margin-top:5px">
+            </td>
+         </tr>
+      </table>
+   </div>
+</div>
+<table border="0" cellpadding="0" cellspacing="0" style="display:none">
+   <tr>
+      <td>
+         <div class="yAxisContainer timespanYAxisContainer">
+            <div id="timespanYAxis" class="yAxis timespanYAxis"></div>
+         </div>
+      </td>
+      <td>
+         <div class="yAxisContainer timespanYAxisContainer">
+            <div id="timespanCommentsYAxis" class="yAxis timespanYAxis"></div>
+         </div>
+      </td>
+   </tr>
+</table>
+<div class="yAxisContainer stripChartYAxisContainer" style="display:none">
+   <div id="stripChartYAxis" class="yAxis stripChartYAxis"></div>
+   <div id="stripChartCommentsYAxis" class="yAxis stripChartYAxis"></div>
+</div>
+</body>
+</html>
