@@ -168,13 +168,16 @@ if (!org.cmucreatelab.util.Arrays) {
       };
 
       this.getValueAtTime = function(device, timeInSecs) {
-         var clampedTime = self.clampTimeToInterval(timeInSecs);
-         var timeIndex = computeTimeIndex(clampedTime);
-         if (0 <= timeIndex && timeIndex < valuesByTime.length) {
-            var deviceIndex = deviceIndexByName[device['name']];
-            var value = valuesByTime[timeIndex][deviceIndex];
-            return (value == NO_DATA) ? null : value;
+         if (typeof device !== 'undefined' && device != null) {
+            var clampedTime = self.clampTimeToInterval(timeInSecs);
+            var timeIndex = computeTimeIndex(clampedTime);
+            if (0 <= timeIndex && timeIndex < valuesByTime.length) {
+               var deviceIndex = deviceIndexByName[device['name']];
+               var value = valuesByTime[timeIndex][deviceIndex];
+               return (value == NO_DATA) ? null : value;
+            }
          }
+
          return null;
       };
 
