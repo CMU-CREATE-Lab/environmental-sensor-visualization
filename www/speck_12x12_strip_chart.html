@@ -713,7 +713,7 @@
          });
          plotContainer.addPlot(grapher.getPlot(id));
 
-         loadStripChartChannel(device);
+         loadStripChartChannel(device, isCorner);
 
          $("#grapherContainer").show();
          $("#channelInfosContainer").show();
@@ -722,14 +722,14 @@
          setSizes();
       }
 
-      function loadStripChartChannel(device) {
+      function loadStripChartChannel(device, isCorner) {
 
          // get the device ID
          var id = device['name'];
 
          // create the DOM element which will contain this strip chart plot
          var stripChartPlotElement = $(stripChartPlotTemplate({ id : id }));
-         var stripChartPlotLabelElement = $(stripChartPlotLabelTemplate({ id : id, name : "Speck " + device['prettyName'] }));
+         var stripChartPlotLabelElement = $(stripChartPlotLabelTemplate({ id : id, name : isCorner ? device['prettyName'] : "Speck " + device['prettyName'] }));
          $("#stripChartPlots").append(stripChartPlotElement);
          $("#stripChartPlotLabels").append(stripChartPlotLabelElement);
 
@@ -743,15 +743,32 @@
                ]
             }
          };
-         var channelDatasource = dataManager.getChannelDatasource(id);
+         var channelDatasource = null;
+         if (isCorner) {
+            channelDatasource =
+            function(level, offset, successCallback) {
+               var json = {
+                  "fields" : ["time", "mean", "stddev", "count"],
+                  "level" : level,
+                  "offset" : offset,
+                  "sample_width" : Math.pow(2, level),
+                  "data" : device['data'],
+                  "type" : "value"
+               };
+
+               successCallback(JSON.stringify(json));
+            };
+         } else {
+            channelDatasource = dataManager.getChannelDatasource(id);
+         }
 
          stripChartGraphers[id] = new org.bodytrack.grapher.MultiplotGrapher(dateAxis);
          stripChartPlotContainers[id] = new PlotContainer("stripChartPlot_" + id, false, []);
          var stripChartGrapher = stripChartGraphers[id];
          var stripChartPlotContainer = stripChartPlotContainers[id];
 
-         stripChartGrapher.addPlot(id, channel, channelDatasource, "stripChartYAxis");
-         stripChartPlotContainer.addPlot(stripChartGrapher.getPlot(id));
+         var plot = stripChartGrapher.addPlot(id, channel, channelDatasource, "stripChartYAxis");
+         stripChartPlotContainer.addPlot(plot);
 
          // Don't want the padding, so just force the range to [min,max]
          var stripChartYAxis = stripChartGrapher.getYAxis(id);
