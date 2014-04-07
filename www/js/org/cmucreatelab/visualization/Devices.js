@@ -53,7 +53,7 @@
        */
       this.getValueAtTime = function(device, timeInSecs) {
          return 0;
-      }
+      };
 
       /**
        * Returns an object containing the device's nearest previous value to the given time, as well as the time of that
